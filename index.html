@@ -6,15 +6,15 @@
   <title>Disponibilidad de Agentes</title>
   <meta name="description" content="Sistema PWA offline para gestionar la disponibilidad de agentes de servicio. Registra, actualiza y monitorea el estado en tiempo real." />
   <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231e3a5f'/><circle cx='16' cy='16' r='7' fill='white' opacity='.9'/><circle cx='16' cy='16' r='3' fill='%233b82f6'/></svg>" />
-  <link rel="apple-touch-icon" href="/icons/logo.png" />
-  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="./icons/logo.png" />
+  <link rel="manifest" href="./manifest.json" />
   <meta name="theme-color" content="#1e3a5f" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <link rel="stylesheet" href="/style.css" />
-  <script src="/lib/dexie.min.js"></script>
-  <script src="/api_local.js" defer></script>
-  <script src="/script.js" defer></script>
+  <link rel="stylesheet" href="./style.css" />
+  <script src="./lib/dexie.min.js"></script>
+  <script src="./api_local.js" defer></script>
+  <script src="./script.js" defer></script>
 </head>
 <body>
   <!-- Notifications -->
@@ -30,17 +30,12 @@
   <header class="app-header" role="banner">
     <div class="header-inner">
       <div class="app-logo">
-        <img src="/icons/logo.png" alt="Logo Disponibilidad de Agentes" class="app-logo-img" width="38" height="38" />
+        <img src="./icons/logo.png" alt="Logo Disponibilidad de Agentes" class="app-logo-img" width="38" height="38" />
         <div>
           <div class="app-title">Disponibilidad de Agentes</div>
           <div class="app-subtitle">Gestión de estado en tiempo real</div>
         </div>
       </div>
-      <nav class="header-actions" aria-label="Acciones de datos">
-        <button id="seed-btn" class="btn btn-ghost btn-sm" aria-label="Cargar datos de ejemplo" title="Datos de ejemplo">🌱 Semilla</button>
-        <button id="export-btn" class="btn btn-ghost btn-sm" aria-label="Exportar datos" title="Exportar">📤 Exportar</button>
-        <button id="import-btn" class="btn btn-ghost btn-sm" aria-label="Importar datos" title="Importar">📥 Importar</button>
-      </nav>
     </div>
   </header>
 
@@ -148,6 +143,21 @@
       </div>
       <div id="history-content" role="log" aria-live="polite"></div>
     </section>
+
+    <!-- Data Management Panel -->
+    <section class="card" aria-label="Gestión de Datos">
+      <div class="card-header" style="margin-bottom: 12px; padding-bottom: 12px;">
+        <h2 class="card-title">
+          <span class="card-title-icon" aria-hidden="true">💾</span>
+          Gestión de Datos
+        </h2>
+      </div>
+      <div class="data-actions" style="display: flex; gap: 8px; flex-wrap: wrap;">
+        <button id="seed-btn" class="btn btn-ghost" aria-label="Cargar datos de ejemplo">🌱 Semilla de prueba</button>
+        <button id="export-btn" class="btn btn-ghost" aria-label="Exportar datos">📤 Exportar JSON</button>
+        <button id="import-btn" class="btn btn-ghost" aria-label="Importar datos">📥 Importar JSON</button>
+      </div>
+    </section>
   </main>
 
   <!-- Footer -->
@@ -159,7 +169,7 @@
     // --- Service Worker Registration ---
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
+        navigator.serviceWorker.register('./sw.js')
           .then(reg => console.log('[SW] Registered:', reg.scope))
           .catch(err => console.warn('[SW] Registration failed:', err));
       });

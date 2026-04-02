@@ -3,20 +3,20 @@
    Strategy: Cache-First for assets, Network-First for navigation
    ============================================================ */
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `agents-pwa-${CACHE_VERSION}`;
 
 const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/style.css',
-  '/script.js',
-  '/api_local.js',
-  '/lib/dexie.min.js',
-  '/manifest.json',
-  '/icons/icon-192.svg',
-  '/icons/icon-512.svg',
-  '/icons/logo.png'
+  './',
+  './index.html',
+  './style.css',
+  './script.js',
+  './api_local.js',
+  './lib/dexie.min.js',
+  './manifest.json',
+  './icons/icon-192.svg',
+  './icons/icon-512.svg',
+  './icons/logo.png'
 ];
 
 // --- Install: pre-cache all static assets ---
