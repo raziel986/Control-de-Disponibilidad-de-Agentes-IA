@@ -278,6 +278,7 @@ document.addEventListener('DOMContentLoaded', () => {
       groupData.forEach(a => {
         const tr = document.createElement('tr');
         tr.classList.add(`child-of-group-${index}`);
+        tr.classList.add('child-model-row');
         tr.style.display = 'none';
 
         const isAvailable = a.status === 'disponible';
@@ -303,7 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         tr.innerHTML = `
-          <td data-label="Historial" style="padding-left: 2rem;">
+          <td data-label="Historial">
             <a href="#" class="agent-email history-link" data-id="${a.id}" aria-label="Ver historial de modelo" style="font-size:0.85rem; color:var(--text-muted);">Ver historial</a>
           </td>
           <td data-label="Modelo de IA"><strong>${a.model_name || '—'}</strong></td>

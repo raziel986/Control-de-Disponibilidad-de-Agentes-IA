@@ -537,6 +537,13 @@ a:hover {
   border-bottom: none;
 }
 
+/* Hierarchy indent on Desktop */
+@media (min-width: 769px) {
+  .data-table .child-model-row td:first-child {
+    padding-left: 3rem;
+  }
+}
+
 .agent-email {
   font-weight: 600;
   color: var(--accent);
