@@ -1,185 +1,209 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
+<head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Disponibilidad de Agentes</title>
-  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><rect width='32' height='32' fill='%232c3e50'/><circle cx='16' cy='16' r='8' fill='white'/></svg>" />
+  <meta name="description" content="Sistema PWA offline para gestionar la disponibilidad de agentes de servicio. Registra, actualiza y monitorea el estado en tiempo real." />
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231e3a5f'/><circle cx='16' cy='16' r='7' fill='white' opacity='.9'/><circle cx='16' cy='16' r='3' fill='%233b82f6'/></svg>" />
+  <link rel="apple-touch-icon" href="/icons/logo.png" />
   <link rel="manifest" href="/manifest.json" />
-  <meta name="theme-color" content="#2c3e50" />
+  <meta name="theme-color" content="#1e3a5f" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <link rel="stylesheet" href="/style.css" />
-  <link rel="stylesheet" href="/tailwind-mini.css" />
-  <script src="https://unpkg.com/dexie@3/dist/dexie.min.js"></script>
+  <script src="/lib/dexie.min.js"></script>
   <script src="/api_local.js" defer></script>
-  <script defer src="/script.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
-    header { padding: 16px; background: #2c3e50; color: white; display: flex; justify-content: space-between; align-items: center; }
-    main { padding: 16px; }
-    .container { max-width: 1000px; margin: 0 auto; }
-    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-    th, td { padding: 8px 12px; border-bottom: 1px solid #ddd; text-align: left; }
-    .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.9em; }
-    .badge.disponible { background: #2ecc71; color: white; }
-    .badge.no-disponible { background: #e74c3c; color: white; }
-    .card { border: 1px solid #ddd; padding: 12px; border-radius: 6px; margin-top: 12px; }
-    .form-row { display: flex; gap: 8px; flex-wrap: wrap; }
-    input, select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; min-width: 180px; }
-    button { padding: 8px 12px; border-radius: 4px; border: none; background: #3498db; color: white; cursor: pointer; }
-    button.secondary { background: #7f8c8d; }
-  </style>
+  <script src="/script.js" defer></script>
 </head>
 <body>
-  <!-- Las acciones offline han sido removidas para simplificar la UI -->
-  <!-- Observación: favicon.ico no se usa directamente; la app usa el favicon inline SVG o SVG icons -->
-  <div id="offline-banner" style="position:fixed;bottom:8px;right:8px;background:#e74c3c;color:white;padding:6px 10px;border-radius:4px;display:none;z-index:9999;"> offline </div>
-  <div id="install-banner" style="display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#2c3e50;color:white;padding:12px 14px;border-radius:6px;z-index:9999;cursor:pointer;">Instalar aplicación</div>
-  <header>
-    <div>Disponibilidad de Agentes</div>
-    <button id="install-btn" style="display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#2c3e50;color:white;border:none;border-radius:6px;padding:12px 14px;z-index:9999;cursor:pointer;">Instalar</button>
-  </header>
-  <main>
-    <div class="container">
-  <section id="agent-form" class="card">
-        <h3>Registrar nuevo agente</h3>
-        <div class="form-row">
-          <input type="text" id="agent_name" placeholder="Nombre del agente" />
-          <input type="email" id="email" placeholder="Correo (único)" />
-          <input type="date" id="start_date" placeholder="Fecha de incorporación" />
-          <input type="text" id="restart_hour" placeholder="Hora de reinicio HH:MM" />
-          <input type="email" id="owner_email" placeholder="Propietario Email (opcional)" />
-          <button id="add-agent">Registrar</button>
-        </div>
-        <div id="form-status" style="margin-top:8px; color:#555"></div>
-      </section>
+  <!-- Notifications -->
+  <div id="notification-container" class="notification-container" aria-live="polite" role="log"></div>
 
-      <section class="card" id="agents-panel">
-        <h3>Agentes</h3>
-        <div class="table-wrapper">
-          <table id="agents-table">
-            <thead>
-              <tr>
-                <th>Correo</th>
-                <th>Nombre</th>
-                <th>Fecha Inicio</th>
-                <th>Reinicio</th>
-                <th>Estado</th>
-                <th>Última actualización</th>
-                <th>Acciones</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
+  <!-- Offline Banner -->
+  <div id="offline-banner" class="offline-banner" role="status" aria-label="Estado de conexión">⚡ Sin conexión</div>
 
-      <section class="card" id="history-section" style="display:none;">
-        <h3>Historial</h3>
-        <div id="history-content"></div>
-      </section>
+  <!-- Install Banner -->
+  <div id="install-banner" class="install-banner" role="button" aria-label="Instalar aplicación" tabindex="0">📲 Instalar aplicación</div>
+
+  <!-- Header -->
+  <header class="app-header" role="banner">
+    <div class="header-inner">
+      <div class="app-logo">
+        <img src="/icons/logo.png" alt="Logo Disponibilidad de Agentes" class="app-logo-img" width="38" height="38" />
+        <div>
+          <div class="app-title">Disponibilidad de Agentes</div>
+          <div class="app-subtitle">Gestión de estado en tiempo real</div>
+        </div>
+      </div>
+      <nav class="header-actions" aria-label="Acciones de datos">
+        <button id="seed-btn" class="btn btn-ghost btn-sm" aria-label="Cargar datos de ejemplo" title="Datos de ejemplo">🌱 Semilla</button>
+        <button id="export-btn" class="btn btn-ghost btn-sm" aria-label="Exportar datos" title="Exportar">📤 Exportar</button>
+        <button id="import-btn" class="btn btn-ghost btn-sm" aria-label="Importar datos" title="Importar">📥 Importar</button>
+      </nav>
     </div>
+  </header>
+
+  <main class="container" role="main">
+    <!-- Stats Bar -->
+    <section class="stats-bar" aria-label="Estadísticas de agentes">
+      <div class="stat-card">
+        <div class="stat-icon total" aria-hidden="true">👥</div>
+        <div class="stat-info">
+          <span id="stat-total" class="stat-value">0</span>
+          <span class="stat-label">Total Agentes</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon available" aria-hidden="true">✅</div>
+        <div class="stat-info">
+          <span id="stat-available" class="stat-value">0</span>
+          <span class="stat-label">Disponibles</span>
+        </div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-icon unavailable" aria-hidden="true">🔴</div>
+        <div class="stat-info">
+          <span id="stat-unavailable" class="stat-value">0</span>
+          <span class="stat-label">No Disponibles</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Registration Form -->
+    <section id="agent-form" class="card" aria-labelledby="form-title">
+      <div class="card-header">
+        <h2 class="card-title" id="form-title">
+          <span class="card-title-icon" aria-hidden="true">➕</span>
+          Registrar Nuevo Agente
+        </h2>
+      </div>
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label" for="agent_name">Nombre</label>
+          <input type="text" id="agent_name" class="form-input" placeholder="Nombre del agente" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="email">Correo electrónico</label>
+          <input type="email" id="email" class="form-input" placeholder="correo@ejemplo.com" required autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="start_date">Fecha de inicio</label>
+          <input type="date" id="start_date" class="form-input" />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="restart_hour">Hora de reinicio</label>
+          <input type="time" id="restart_hour" class="form-input" required />
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="owner_email">Propietario (opcional)</label>
+          <input type="email" id="owner_email" class="form-input" placeholder="propietario@ejemplo.com" autocomplete="off" />
+        </div>
+        <div class="form-group" style="justify-content: flex-end;">
+          <button id="add-agent" class="btn btn-accent" aria-label="Registrar nuevo agente">
+            ➕ Registrar
+          </button>
+        </div>
+      </div>
+      <div id="form-status" role="status" aria-live="polite" style="margin-top:10px; font-size:0.85rem; color:var(--text-secondary);"></div>
+    </section>
+
+    <!-- Agents Table -->
+    <section id="agents-panel" class="card" aria-labelledby="agents-title">
+      <div class="card-header">
+        <h2 class="card-title" id="agents-title">
+          <span class="card-title-icon" aria-hidden="true">📋</span>
+          Agentes Registrados
+        </h2>
+        <button id="refresh-all-btn" class="btn btn-ghost btn-sm" aria-label="Actualizar todos los agentes">
+          🔄 Actualizar Todos
+        </button>
+      </div>
+      <div class="table-wrapper">
+        <table id="agents-table" class="data-table" aria-label="Lista de agentes">
+          <thead>
+            <tr>
+              <th scope="col">Correo</th>
+              <th scope="col">Nombre</th>
+              <th scope="col">Fecha Inicio</th>
+              <th scope="col">Reinicio</th>
+              <th scope="col">Estado</th>
+              <th scope="col">Última Actualización</th>
+              <th scope="col">Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- History Panel -->
+    <section id="history-section" class="card history-panel" style="display:none;" aria-labelledby="history-title">
+      <div class="card-header">
+        <h2 class="card-title" id="history-title">
+          <span class="card-title-icon" aria-hidden="true">📜</span>
+          Historial de Cambios
+        </h2>
+        <button id="close-history" class="btn btn-ghost btn-sm" aria-label="Cerrar historial">✕ Cerrar</button>
+      </div>
+      <div id="history-content" role="log" aria-live="polite"></div>
+    </section>
   </main>
+
+  <!-- Footer -->
+  <footer style="text-align:center; padding:24px; color:var(--text-muted); font-size:0.78rem;">
+    Disponibilidad de Agentes &mdash; PWA 100% Offline &bull; v2.0
+  </footer>
+
   <script>
-    // Register Service Worker for PWA functionality
+    // --- Service Worker Registration ---
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js').then(reg => {
-          console.log('Service Worker registered:', reg);
-        }).catch(err => {
-          console.log('Service Worker registration failed:', err);
-        });
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('[SW] Registered:', reg.scope))
+          .catch(err => console.warn('[SW] Registration failed:', err));
       });
     }
-    // Install Prompt (mobile) – re-activated: show a banner and trigger native prompt when available
+
+    // --- PWA Install Prompt ---
     let deferredInstallPrompt = null;
+
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredInstallPrompt = e;
       const banner = document.getElementById('install-banner');
-      if (banner) {
-        banner.style.display = 'block';
-      } else {
-        // create banner if not exists
-        const b = document.createElement('div');
-        b.id = 'install-banner';
-        b.style.position = 'fixed';
-        b.style.bottom = '16px';
-        b.style.left = '50%';
-        b.style.transform = 'translateX(-50%)';
-        b.style.background = '#2f6';
-        b.style.color = 'white';
-        b.style.padding = '12px 14px';
-        b.style.borderRadius = '6px';
-        b.style.zIndex = '9999';
-        b.style.cursor = 'pointer';
-        b.textContent = 'Instalar aplicación';
-        b.addEventListener('click', () => {
-          if (deferredInstallPrompt) {
-            deferredInstallPrompt.prompt();
-            deferredInstallPrompt.userChoice.then(() => { deferredInstallPrompt = null; b.style.display = 'none'; });
-          }
-        });
-        document.body.appendChild(b);
-      }
+      if (banner) banner.style.display = 'block';
     });
 
     window.addEventListener('appinstalled', () => {
       const banner = document.getElementById('install-banner');
       if (banner) banner.style.display = 'none';
+      deferredInstallPrompt = null;
     });
 
-    // Clicking banner triggers install prompt (in case the banner exists)
-    document.addEventListener('click', (ev) => {
-      const t = ev.target;
-      const banner = document.getElementById('install-banner');
-      if (t && t.id === 'install-banner' && banner && banner.style.display !== 'none') {
-        // already wired in via banner's own listener, but keep for safety
+    document.getElementById('install-banner')?.addEventListener('click', () => {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        deferredInstallPrompt.userChoice.then(() => {
+          deferredInstallPrompt = null;
+          document.getElementById('install-banner').style.display = 'none';
+        });
       }
     });
-    // Simple online/offline banner
+
+    // --- Online/Offline Status ---
     function updateOnlineStatus() {
       const banner = document.getElementById('offline-banner');
+      if (!banner) return;
       if (navigator.onLine) {
         banner.style.display = 'none';
       } else {
         banner.style.display = 'block';
-        banner.textContent = 'Offline - cambia a modo offline';
       }
     }
     window.addEventListener('online', updateOnlineStatus);
     window.addEventListener('offline', updateOnlineStatus);
     updateOnlineStatus();
-    // Show mobile actions container on small viewports
-  function ensureMobileActionsVisible(){
-      const el = document.getElementById('mobile-actions');
-      if (!el) return;
-      if (window.innerWidth <= 680) el.style.display = 'block';
-      else el.style.display = 'none';
-    }
-    window.addEventListener('resize', ensureMobileActionsVisible);
-    ensureMobileActionsVisible();
   </script>
-  <script>
-    // Install Prompt (mobile) – basic integration with a visible button
-    let deferredInstallPrompt = null;
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredInstallPrompt = e;
-      const btn = document.getElementById('install-btn');
-      if (btn) btn.style.display = 'inline-block';
-    });
-    window.addEventListener('appinstalled', () => {
-      const btn = document.getElementById('install-btn');
-      if (btn) btn.style.display = 'none';
-    });
-    document.getElementById('install-btn')?.addEventListener('click', () => {
-      if (deferredInstallPrompt) {
-        deferredInstallPrompt.prompt();
-        deferredInstallPrompt.userChoice.then(() => { deferredInstallPrompt = null; });
-      } else {
-        alert('Instalar desde el navegador: la PWA debe ser eligible (agregar a inicio).');
-      }
-    });
-  </script>
-  </body>
+</body>
 </html>

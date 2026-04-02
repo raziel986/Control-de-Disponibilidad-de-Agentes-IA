@@ -1,218 +1,418 @@
 "use strict";
-// 100% Offline UI using Dexie (via frontend/api_local.js window.localApi)
+/* ============================================================
+   Disponibilidad de Agentes — Frontend Controller
+   100% Offline via Dexie (IndexedDB) through window.localApi
+   ============================================================ */
+
 document.addEventListener('DOMContentLoaded', () => {
-  const emailInput = document.getElementById('email');
-  const restartInput = document.getElementById('restart_hour');
-  const addBtn = document.getElementById('add-agent');
-  const formStatus = document.getElementById('form-status');
-  const tbody = document.querySelector('#agents-table tbody');
-  const historySection = document.getElementById('history-section');
-  const historyContent = document.getElementById('history-content');
+  // --- DOM References ---
+  const emailInput      = document.getElementById('email');
+  const restartInput    = document.getElementById('restart_hour');
+  const nameInput       = document.getElementById('agent_name');
+  const startDateInput  = document.getElementById('start_date');
+  const ownerEmailInput = document.getElementById('owner_email');
+  const addBtn          = document.getElementById('add-agent');
+  const formStatus      = document.getElementById('form-status');
+  const tbody           = document.querySelector('#agents-table tbody');
+  const historySection  = document.getElementById('history-section');
+  const historyContent  = document.getElementById('history-content');
+  const closeHistoryBtn = document.getElementById('close-history');
+  const refreshAllBtn   = document.getElementById('refresh-all-btn');
+  const notifContainer  = document.getElementById('notification-container');
 
-  // Notification container (reuse if exists)
-  const notificationContainer = document.getElementById('notification-container') || (() => {
-    const n = document.createElement('div'); n.id = 'notification-container';
-    n.style.cssText = 'position:fixed;top:20px;right:20px;z-index:1000;';
-    document.body.appendChild(n); return n;
-  })();
+  // Stats elements
+  const statTotal       = document.getElementById('stat-total');
+  const statAvailable   = document.getElementById('stat-available');
+  const statUnavailable = document.getElementById('stat-unavailable');
 
-  function showNotification(message, type = 'info', duration = 3000) {
+  // Data action buttons
+  const seedBtn   = document.getElementById('seed-btn');
+  const exportBtn = document.getElementById('export-btn');
+  const importBtn = document.getElementById('import-btn');
+
+  // --- State ---
+  let cachedAgents = [];
+
+  // --- Notifications ---
+  function showNotification(message, type = 'info', duration = 3500) {
     const el = document.createElement('div');
+    el.className = `notification ${type}`;
+    el.setAttribute('role', 'alert');
     el.textContent = message;
-    el.style.cssText = `padding:12px 16px;margin-bottom:8px;border-radius:4px;background:${type==='success'? '#2ecc71' : type==='error'? '#e74c3c' : type==='warning' ? '#f39c12' : '#3498db'};color:white;box-shadow:0 2px 8px rgba(0,0,0,.15);`;
-    notificationContainer.appendChild(el);
-    setTimeout(() => el.remove(), duration);
+    notifContainer.appendChild(el);
+
+    setTimeout(() => {
+      el.classList.add('notification-exit');
+      setTimeout(() => el.remove(), 300);
+    }, duration);
   }
 
+  // --- Stats ---
+  async function updateStats() {
+    if (!window.localApi?.getStats) return;
+    try {
+      const stats = await window.localApi.getStats();
+      animateNumber(statTotal, stats.total);
+      animateNumber(statAvailable, stats.available);
+      animateNumber(statUnavailable, stats.unavailable);
+    } catch (err) {
+      console.error('[Stats]', err);
+    }
+  }
+
+  function animateNumber(el, target) {
+    if (!el) return;
+    const current = parseInt(el.textContent) || 0;
+    if (current === target) { el.textContent = target; return; }
+    const diff = target - current;
+    const steps = Math.min(Math.abs(diff), 15);
+    const stepTime = Math.max(30, Math.floor(200 / steps));
+    let step = 0;
+    const interval = setInterval(() => {
+      step++;
+      const progress = step / steps;
+      el.textContent = Math.round(current + diff * progress);
+      if (step >= steps) {
+        el.textContent = target;
+        clearInterval(interval);
+      }
+    }, stepTime);
+  }
+
+  // --- Render Agents Table ---
   function renderAgents(agents, loading = false) {
     tbody.innerHTML = '';
+
     if (loading) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td colspan="5" style="text-align:center;padding:40px;">Cargando agentes...</td>`;
-      tbody.appendChild(tr);
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7" class="loading-text">
+            <span class="spinner"></span> Cargando agentes...
+          </td>
+        </tr>`;
       return;
     }
+
     if (!agents || agents.length === 0) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td colspan="5" style="text-align:center;padding:40px;color:#7f8c8d;">No hay agentes registrados. Agrega uno.</td>`;
-      tbody.appendChild(tr);
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="7">
+            <div class="empty-state">
+              <div class="empty-state-icon">📭</div>
+              <div class="empty-state-text">No hay agentes registrados.<br>Agrega el primero usando el formulario.</div>
+            </div>
+          </td>
+        </tr>`;
       return;
     }
-    // Cache agents for potential re-render when toggling grouping
-    window.__cachedAgents__ = agents;
+
+    cachedAgents = agents;
+
     agents.forEach(a => {
       const tr = document.createElement('tr');
-      const statusLabel = a.status === 'disponible' ? 'Disponible' : 'No disponible';
-      const badgeClass = a.status === 'disponible' ? 'badge disponible' : 'badge no-disponible';
-      let lastUpdateFormatted = 'N/A';
+      const isAvailable = a.status === 'disponible';
+      const statusLabel = isAvailable ? 'Disponible' : 'No disponible';
+      const badgeClass = isAvailable ? 'badge-disponible' : 'badge-no-disponible';
+
+      let lastUpdate = '—';
       if (a.last_update) {
-        try { lastUpdateFormatted = new Date(a.last_update).toLocaleString('es-ES'); } catch(e) { lastUpdateFormatted = a.last_update; }
+        try {
+          lastUpdate = new Date(a.last_update).toLocaleString('es-ES', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit'
+          });
+        } catch { lastUpdate = a.last_update; }
       }
+
+      let startDate = '—';
+      if (a.start_date) {
+        try {
+          startDate = new Date(a.start_date).toLocaleDateString('es-ES');
+        } catch { startDate = ''; }
+      }
+
       tr.innerHTML = `
-        <td data-label="Correo"><a href="#" data-id="${a.id}" data-email="${a.email}" class="history-link" style="color:#3498db;text-decoration:none;">${a.email}</a></td>
-        <td data-label="Nombre">${a.name || ''}</td>
-        <td data-label="Fecha Inicio">${a.start_date ? (new Date(a.start_date).toLocaleDateString('es-ES')) : ''}</td>
-        <td data-label="Reinicio">${a.restart_hour}</td>
-        <td data-label="Estado"><span class="${badgeClass}">${statusLabel}</span></td>
-        <td data-label="Última actualización">${lastUpdateFormatted}</td>
-        <td data-label="Acciones">
-          <button data-id="${a.id}" data-email="${a.email}" class="refresh-btn" style="margin-right:4px;">Actualizar</button>
-          <button data-id="${a.id}" data-email="${a.email}" class="toggle-manual-btn" style="margin-right:4px;">Forzar</button>
-          <select data-id="${a.id}" data-email="${a.email}" class="force-select" style="margin-right:4px;padding:4px;">
-            <option value="disponible">Disponible</option>
-            <option value="no disponible">No disponible</option>
-          </select>
-          <button data-id="${a.id}" data-email="${a.email}" class="delete-btn" style="background:#e74c3c;margin-left:4px;">Eliminar</button>
+        <td data-label="Correo">
+          <a href="#" class="agent-email history-link" data-id="${a.id}" data-email="${a.email}" aria-label="Ver historial de ${a.email}">${a.email}</a>
         </td>
-      `;
+        <td data-label="Nombre">${a.name || '—'}</td>
+        <td data-label="Fecha Inicio">${startDate}</td>
+        <td data-label="Reinicio">${a.restart_hour}</td>
+        <td data-label="Estado">
+          <span class="badge ${badgeClass}" role="status">
+            <span class="badge-dot"></span>
+            ${statusLabel}
+          </span>
+        </td>
+        <td data-label="Última Actualización">${lastUpdate}</td>
+        <td data-label="Acciones">
+          <div class="cell-actions">
+            <button data-id="${a.id}" class="btn btn-ghost btn-sm refresh-btn" aria-label="Actualizar agente ${a.email}" title="Actualizar">🔄</button>
+            <select data-id="${a.id}" class="force-select" aria-label="Estado para ${a.email}">
+              <option value="disponible" ${isAvailable ? 'selected' : ''}>Disponible</option>
+              <option value="no disponible" ${!isAvailable ? 'selected' : ''}>No disponible</option>
+            </select>
+            <button data-id="${a.id}" class="btn btn-primary btn-sm force-btn" aria-label="Forzar estado de ${a.email}" title="Forzar estado">⚡</button>
+            <button data-id="${a.id}" class="btn btn-danger btn-sm delete-btn" aria-label="Eliminar agente ${a.email}" title="Eliminar">🗑️</button>
+          </div>
+        </td>`;
       tbody.appendChild(tr);
     });
   }
 
-  async function fetchAgents(){
+  // --- Fetch & Render ---
+  async function fetchAgents() {
     renderAgents([], true);
-    if (window.localApi?.getAgents) {
-      try {
-        const agents = await window.localApi.getAgents();
-        const list = Array.isArray(agents) ? agents : [];
-        renderAgents(list);
-      } catch (err) {
-        console.error('fetchAgents error', err);
-        showNotification('Error leyendo agentes offline: ' + (err?.message||err), 'error');
-        // Fallback to empty view to avoid stuck loading state
-        renderAgents([], false);
-      }
-    } else {
-      // No local API available
+    if (!window.localApi?.getAgents) {
+      renderAgents([], false);
+      return;
+    }
+    try {
+      const agents = await window.localApi.getAgents();
+      renderAgents(Array.isArray(agents) ? agents : []);
+      await updateStats();
+    } catch (err) {
+      console.error('[fetchAgents]', err);
+      showNotification('Error cargando agentes: ' + (err?.message || err), 'error');
       renderAgents([], false);
     }
   }
 
-  function showHistory(email) {
-    historyContent.innerHTML = '<div class="loading-spinner" style="display:inline-block;"></div> Cargando historial...';
+  // --- History ---
+  function showHistory(id) {
+    historyContent.innerHTML = '<div class="loading-text"><span class="spinner"></span> Cargando historial...</div>';
     historySection.style.display = 'block';
-    if (window.localApi?.getHistory) {
-      window.localApi.getHistory(email).then(hist => {
-        if (!hist || hist.length === 0) {
-          historyContent.innerHTML = '<div style="color:#7f8c8d;">No hay historial de cambios para este agente.</div>';
-        } else {
-          historyContent.innerHTML = hist.map(h => {
-            let changeTime = h.change_time;
-            try { changeTime = new Date(h.change_time).toLocaleString('es-ES'); } catch(e){}
-            return `<div style="margin-bottom:8px;padding:8px;background:#f8f9fa;border-left:4px solid ${h.new_status==='disponible'?'#2ecc71':'#e74c3c'};"><strong>${changeTime}</strong><br>${h.old_status} → ${h.new_status}<br><em>Razón: ${h.reason||'No especificada'}</em></div>`;
-          }).join('');
-        }
-        showNotification('Historial cargado correctamente.', 'success', 2000);
-      }).catch(err => {
-        historyContent.innerHTML = '<div style="color:#e74c3c;">Error al cargar historial.</div>';
-        showNotification('Error al cargar historial: ' + (err?.message || err), 'error');
-      });
-    } else {
-      historyContent.innerHTML = '<div style="color:#e74c3c;">Historial no disponible offline.</div>';
+    historySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    if (!window.localApi?.getHistory) {
+      historyContent.innerHTML = '<div class="empty-state"><div class="empty-state-text">Historial no disponible.</div></div>';
+      return;
     }
+
+    window.localApi.getHistory(id).then(hist => {
+      if (!hist || hist.length === 0) {
+        historyContent.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div><div class="empty-state-text">No hay cambios registrados para este agente.</div></div>';
+        return;
+      }
+
+      historyContent.innerHTML = hist.map(h => {
+        let changeTime = h.change_time;
+        try {
+          changeTime = new Date(h.change_time).toLocaleString('es-ES', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          });
+        } catch {}
+
+        const directionClass = h.new_status === 'disponible' ? 'to-disponible' : 'to-no-disponible';
+
+        return `
+          <div class="history-item ${directionClass}">
+            <div class="history-time">📅 ${changeTime}</div>
+            <div class="history-change">
+              <span>${h.old_status}</span>
+              <span class="arrow">→</span>
+              <span><strong>${h.new_status}</strong></span>
+            </div>
+            <div class="history-reason">Razón: ${h.reason || 'No especificada'}</div>
+          </div>`;
+      }).join('');
+
+      showNotification('Historial cargado', 'success', 2000);
+    }).catch(err => {
+      historyContent.innerHTML = '<div class="empty-state"><div class="empty-state-text" style="color:var(--danger)">Error al cargar historial.</div></div>';
+      showNotification('Error: ' + (err?.message || err), 'error');
+    });
   }
 
-  const container = document.querySelector('#agents-table');
-  container.addEventListener('click', (ev) => {
+  // --- Close History ---
+  closeHistoryBtn?.addEventListener('click', () => {
+    historySection.style.display = 'none';
+  });
+
+  // --- Table Event Delegation ---
+  document.querySelector('#agents-table').addEventListener('click', (ev) => {
     const t = ev.target;
+
+    // History link
     if (t.classList.contains('history-link')) {
       ev.preventDefault();
-      showHistory(t.getAttribute('data-id'));
-    } else if (t.classList.contains('refresh-btn')) {
-      const id = t.getAttribute('data-id'); const btn = t; btn.disabled = true; const nowIso = new Date().toISOString(); window.localApi?.refreshAgent?.(id, nowIso).then(()=> fetchAgents()).catch(err => showNotification('Error: '+ (err?.message||err),'error')).finally(()=>{ btn.disabled=false; });
-    } else if (t.classList.contains('toggle-manual-btn')) {
-      const id = t.getAttribute('data-id'); const btn = t; const status = prompt('Forzar estado: disponible o no disponible'); if (status === 'disponible' || status === 'no disponible') { btn.disabled = true; window.localApi?.updateAgentManual?.(id, status).then(()=> fetchAgents()).catch(err => showNotification('Error: '+ (err?.message||err),'error')).finally(()=>{ btn.disabled=false; }); }
-    } else if (t.classList.contains('delete-btn')) {
-      const id = t.getAttribute('data-id'); if (confirm(`¿Está seguro de eliminar al agente con ID ${id}? Esta acción no se puede deshacer.`)) {
-        window.localApi?.deleteAgent?.(id).then(()=> fetchAgents()).catch(err => showNotification('Error: '+ (err?.message||err),'error'));
-      }
+      const id = t.getAttribute('data-id');
+      showHistory(id);
+      return;
+    }
+
+    // Refresh single agent
+    if (t.classList.contains('refresh-btn') || t.closest('.refresh-btn')) {
+      const btn = t.classList.contains('refresh-btn') ? t : t.closest('.refresh-btn');
+      const id = btn.getAttribute('data-id');
+      btn.disabled = true;
+      const nowIso = new Date().toISOString();
+      window.localApi?.refreshAgent?.(id, nowIso)
+        .then(() => { fetchAgents(); showNotification('Agente actualizado', 'success', 2000); })
+        .catch(err => showNotification('Error: ' + (err?.message || err), 'error'))
+        .finally(() => { btn.disabled = false; });
+      return;
+    }
+
+    // Force status using the select
+    if (t.classList.contains('force-btn') || t.closest('.force-btn')) {
+      const btn = t.classList.contains('force-btn') ? t : t.closest('.force-btn');
+      const id = btn.getAttribute('data-id');
+      const row = btn.closest('tr') || btn.closest('.cell-actions');
+      const select = row?.querySelector('.force-select');
+      if (!select) return;
+      const newStatus = select.value;
+      btn.disabled = true;
+      window.localApi?.updateAgentManual?.(id, newStatus)
+        .then(() => { fetchAgents(); showNotification(`Estado cambiado a "${newStatus}"`, 'success', 2500); })
+        .catch(err => showNotification('Error: ' + (err?.message || err), 'error'))
+        .finally(() => { btn.disabled = false; });
+      return;
+    }
+
+    // Delete agent
+    if (t.classList.contains('delete-btn') || t.closest('.delete-btn')) {
+      const btn = t.classList.contains('delete-btn') ? t : t.closest('.delete-btn');
+      const id = btn.getAttribute('data-id');
+      if (!confirm('¿Estás seguro de eliminar este agente?\nEsta acción no se puede deshacer.')) return;
+      btn.disabled = true;
+      window.localApi?.deleteAgent?.(id)
+        .then(() => { fetchAgents(); showNotification('Agente eliminado', 'info', 2500); })
+        .catch(err => showNotification('Error: ' + (err?.message || err), 'error'))
+        .finally(() => { btn.disabled = false; });
     }
   });
 
-  addBtn.addEventListener('click', () => {
-    const email = emailInput.value.trim(); const restart = restartInput.value.trim();
-    const nameInput = document.getElementById('agent_name');
-    const startDateInput = document.getElementById('start_date');
-    const ownerEmailInput = document.getElementById('owner_email');
-    const agent_name = (nameInput && nameInput.value.trim()) || '';
-    const start_date = (startDateInput && startDateInput.value) ? new Date(startDateInput.value).toISOString() : (null);
-    const owner_email = (ownerEmailInput && ownerEmailInput.value.trim()) || '';
+  // --- Add Agent ---
+  addBtn.addEventListener('click', async () => {
+    const email = emailInput.value.trim();
+    const restart = restartInput.value.trim();
+    const name = nameInput?.value.trim() || '';
+    const startDate = startDateInput?.value ? new Date(startDateInput.value).toISOString() : null;
+    const ownerEmail = ownerEmailInput?.value.trim() || '';
+
     formStatus.textContent = '';
-    if (!email) { showNotification('El correo es requerido.', 'warning'); return; }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; if (!emailRegex.test(email)) { showNotification('El correo debe tener un formato válido.', 'warning'); return; }
-    if (!restart) { showNotification('La hora de reinicio es requerida.', 'warning'); return; }
-    const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/; if (!timeRegex.test(restart)) { showNotification('La hora debe estar en formato HH:MM (ej: 08:30).', 'warning'); return; }
-    window.localApi?.addAgent?.({ email, restart_hour: restart, owner_email, name: agent_name, start_date }).then(()=>{ emailInput.value=''; restartInput.value=''; if (nameInput) nameInput.value=''; if (startDateInput) startDateInput.value=''; if (ownerEmailInput) ownerEmailInput.value=''; fetchAgents(); }).catch(err => showNotification('Error: '+(err?.message||err),'error'));
+
+    // Validations
+    if (!email) { showNotification('El correo es requerido.', 'warning'); emailInput.focus(); return; }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) { showNotification('Formato de correo inválido.', 'warning'); emailInput.focus(); return; }
+    if (!restart) { showNotification('La hora de reinicio es requerida.', 'warning'); restartInput.focus(); return; }
+
+    addBtn.disabled = true;
+    addBtn.textContent = '⏳ Registrando...';
+
+    try {
+      await window.localApi.addAgent({
+        email,
+        restart_hour: restart,
+        owner_email: ownerEmail,
+        name,
+        start_date: startDate
+      });
+
+      // Clear form
+      emailInput.value = '';
+      restartInput.value = '';
+      if (nameInput) nameInput.value = '';
+      if (startDateInput) startDateInput.value = '';
+      if (ownerEmailInput) ownerEmailInput.value = '';
+
+      showNotification('✅ Agente registrado correctamente', 'success');
+      await fetchAgents();
+    } catch (err) {
+      showNotification(err?.message || 'Error al registrar', 'error');
+    } finally {
+      addBtn.disabled = false;
+      addBtn.textContent = '➕ Registrar';
+    }
   });
 
-  // Initial load
-  const GROUP_KEY = 'groupByOwner';
-  let groupByOwner = localStorage.getItem(GROUP_KEY) === 'true';
-  function renderGroupsToggle(){
-    const btn = document.getElementById('group-by-owner');
-    if (!btn) return;
-    btn.textContent = groupByOwner ? 'Agrupar: activado' : 'Agrupar por correo';
-  }
-  function toggleGroupByOwner(){
-    groupByOwner = !groupByOwner; localStorage.setItem(GROUP_KEY, String(groupByOwner)); renderGroupsToggle(); renderAgents( ( window.__cachedAgents__ || [] ), false );
-  }
-  // Expose a cached agents array for re-rendering when toggling
-  window.__cachedAgents__ = [];
-  document.addEventListener('DOMContentLoaded', () => {
-    const btnGroup = document.getElementById('group-by-owner');
-    if (btnGroup) btnGroup.addEventListener('click', toggleGroupByOwner);
-  });
-  fetchAgents();
+  // --- Refresh All ---
+  refreshAllBtn?.addEventListener('click', async () => {
+    refreshAllBtn.disabled = true;
+    refreshAllBtn.textContent = '⏳ Actualizando...';
+    const nowIso = new Date().toISOString();
+    let updated = 0;
 
-  // Mobile/offline utilities: seed/export/import
-  const seedBtn = document.getElementById('seed-btn');
-  const exportBtn = document.getElementById('export-btn');
-  const importBtn = document.getElementById('import-btn');
-  if (seedBtn) {
-    seedBtn.addEventListener('click', async () => {
-      try {
-        if (window.localApi?.seedIfNeeded) {
-          await window.localApi.seedIfNeeded();
-          await fetchAgents();
-          showNotification('Semilla aplicada (si fue necesaria).', 'success');
-        }
-      } catch (e) {
-        showNotification('Error al sembrar datos: ' + (e?.message || e), 'error');
+    try {
+      for (const agent of cachedAgents) {
+        const result = await window.localApi.refreshAgent(agent.id, nowIso);
+        if (result.status === 'disponible' && agent.status !== 'disponible') updated++;
       }
-    });
-  }
-  if (exportBtn) {
-    exportBtn.addEventListener('click', async () => {
+      await fetchAgents();
+      showNotification(`Actualización completa. ${updated} agente(s) cambiaron a disponible.`, 'success');
+    } catch (err) {
+      showNotification('Error: ' + (err?.message || err), 'error');
+    } finally {
+      refreshAllBtn.disabled = false;
+      refreshAllBtn.textContent = '🔄 Actualizar Todos';
+    }
+  });
+
+  // --- Seed ---
+  seedBtn?.addEventListener('click', async () => {
+    try {
+      await window.localApi.seedIfNeeded();
+      await fetchAgents();
+      showNotification('Datos de ejemplo cargados', 'success');
+    } catch (err) {
+      showNotification('Error: ' + (err?.message || err), 'error');
+    }
+  });
+
+  // --- Export ---
+  exportBtn?.addEventListener('click', async () => {
+    try {
+      const data = await window.localApi.exportData();
+      const json = JSON.stringify(data, null, 2);
+
+      // Create downloadable file
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `agentes_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      showNotification('Datos exportados como archivo JSON', 'success');
+    } catch (err) {
+      showNotification('Error exportando: ' + (err?.message || err), 'error');
+    }
+  });
+
+  // --- Import ---
+  importBtn?.addEventListener('click', () => {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json';
+    fileInput.addEventListener('change', async (ev) => {
+      const file = ev.target.files[0];
+      if (!file) return;
       try {
-        if (window.localApi?.exportData) {
-          const data = await window.localApi.exportData();
-          const json = JSON.stringify(data, null, 2);
-          if (navigator.clipboard && navigator.clipboard.writeText) {
-            await navigator.clipboard.writeText(json);
-            alert('Datos exportados y copiados al portapapeles');
-          } else {
-            prompt('Copie el JSON exportado', json);
-          }
-        }
-      } catch (e) {
-        showNotification('Error exportando datos: ' + (e?.message || e), 'error');
-      }
-    });
-  }
-  if (importBtn) {
-    importBtn.addEventListener('click', async () => {
-      try {
-        const text = prompt('Pega el JSON exportado de Dexie:');
-        if (!text) return;
+        const text = await file.text();
         const data = JSON.parse(text);
-        if (window.localApi?.importData) {
-          await window.localApi.importData(data);
-          await fetchAgents();
-          alert('Datos importados correctamente');
-        }
-      } catch (e) {
-        showNotification('Error importando datos: ' + (e?.message || e), 'error');
+        if (!confirm(`¿Importar ${data.agents?.length || 0} agente(s) y ${data.history?.length || 0} registro(s) de historial?\nEsto reemplazará los datos actuales.`)) return;
+        await window.localApi.importData(data);
+        await fetchAgents();
+        showNotification('Datos importados correctamente', 'success');
+      } catch (err) {
+        showNotification('Error importando: ' + (err?.message || err), 'error');
       }
     });
-  }
+    fileInput.click();
+  });
+
+  // --- Keyboard: Enter to submit form ---
+  document.getElementById('agent-form')?.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && !ev.shiftKey) {
+      ev.preventDefault();
+      addBtn.click();
+    }
+  });
+
+  // --- Initial Load ---
+  fetchAgents();
 });
