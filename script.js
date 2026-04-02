@@ -303,7 +303,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         tr.innerHTML = `
-          <td data-label="Correo (Usuario)" style="padding-left: 2rem;">
+          <td data-label="Historial" style="padding-left: 2rem;">
             <a href="#" class="agent-email history-link" data-id="${a.id}" aria-label="Ver historial de modelo" style="font-size:0.85rem; color:var(--text-muted);">Ver historial</a>
           </td>
           <td data-label="Modelo de IA"><strong>${a.model_name || '—'}</strong></td>
