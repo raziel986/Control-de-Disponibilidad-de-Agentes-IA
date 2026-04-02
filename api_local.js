@@ -1,6 +1,6 @@
 /* ============================================================
    Dexie.js IndexedDB API — Offline Agent Store
-   Version: 3.0 (Relational: Directory + Availability/Shifts)
+   Version: 4.0 (AI Agent Domain Model)
    ============================================================ */
 (function () {
   'use strict';
@@ -14,50 +14,57 @@
   const db = new Dexie(DB_NAME);
 
   // --- Schema Versions ---
-  db.version(1).stores({
-    agents: 'email',
-    history: '++id, email'
-  });
-
-  db.version(2).stores({
-    agents2: '++id, email',
-    history2: '++id, agent_id, email'
-  });
-
+  db.version(1).stores({ agents: 'email', history: '++id, email' });
+  db.version(2).stores({ agents2: '++id, email', history2: '++id, agent_id, email' });
   db.version(3).stores({
     directory: '++id, email',
     agents3: '++id, directory_id, status',
+    history3: '++id, agent_id'
+  });
+
+  db.version(4).stores({
+    users: '++id, email',
+    ai_models: '++id, user_id, status',
+    history4: '++id, model_id',
+    // Kept to allow migration
+    directory: '++id, email',
+    agents3: '++id, directory_id, status',
     history3: '++id, agent_id',
-    // Kept to allow migration from fresh installs or past v2
     agents2: '++id, email',
     history2: '++id, agent_id, email',
     agents: 'email',
     history: '++id, email'
   }).upgrade(async (trans) => {
-    // Migration v2 -> v3
-    const oldAgents = await trans.table('agents2').toArray();
-    const oldHistory = await trans.table('history2').toArray();
+    // Migration v3 -> v4
+    const oldDirs = await trans.table('directory').toArray();
+    const oldAgents = await trans.table('agents3').toArray();
+    const oldHistory = await trans.table('history3').toArray();
 
-    // Directory deduplication logic
-    const dirMap = new Map(); // email -> dirId
+    // Map old format to new format
+    const userMap = new Map(); // email -> userId
+    for (const dir of oldDirs) {
+      if (!dir.email) continue;
+      if (!userMap.has(dir.email)) {
+        const userId = await trans.table('users').add({ email: dir.email });
+        userMap.set(dir.email, userId);
+      }
+    }
 
     for (const a of oldAgents) {
-      if (!a.email) continue;
-      let dirId;
-      if (dirMap.has(a.email)) {
-        dirId = dirMap.get(a.email);
-      } else {
-        dirId = await trans.table('directory').add({
-          name: a.name || '',
-          email: a.email
-        });
-        dirMap.set(a.email, dirId);
-      }
+      // Find old directory email to link to new user
+      const dirOrigin = oldDirs.find(d => d.id === a.directory_id);
+      if (!dirOrigin) continue;
+      const uId = userMap.get(dirOrigin.email);
+      if (!uId) continue;
 
-      const newAgentId = await trans.table('agents3').add({
-        directory_id: dirId,
+      // Ensure model name is carried over, default to 'Genérico' if none existed
+      let modelName = 'Modelo Genérico';
+      if (a.name) modelName = a.name;
+
+      const newModelId = await trans.table('ai_models').add({
+        user_id: uId,
+        model_name: modelName,
         restart_hour: a.restart_hour || '08:00',
-        owner_email: a.owner_email || a.email,
         status: a.status || 'no disponible',
         last_update: a.last_update || new Date().toISOString(),
         start_date: a.start_date || null
@@ -65,8 +72,8 @@
 
       const relatedHistory = oldHistory.filter(h => h.agent_id === a.id);
       for (const h of relatedHistory) {
-        await trans.table('history3').add({
-          agent_id: newAgentId,
+        await trans.table('history4').add({
+          model_id: newModelId,
           old_status: h.old_status,
           new_status: h.new_status,
           change_time: h.change_time,
@@ -77,49 +84,37 @@
   });
 
   // --- Helpers ---
-  function dirStore() { return db.directory; }
-  function store() { return db.agents3; }
-  function histStore() { return db.history3; }
+  function usersStore() { return db.users; }
+  function modelsStore() { return db.ai_models; }
+  function histStore() { return db.history4; }
 
-  // --- Directory Operations ---
-
-  async function getDirectoryAgents() {
-    try {
-      return await dirStore().toArray();
-    } catch(err) {
-      console.error(err);
-      return [];
-    }
-  }
-
-  async function addDirectoryAgent(name, email) {
+  // --- Users ---
+  async function createOrGetUser(email) {
     if (!email) throw new Error('El correo es requerido.');
-    const existing = await dirStore().where('email').equals(email).first();
-    if (existing) throw new Error('Este correo ya está registrado en el directorio.');
+    const existing = await usersStore().where('email').equals(email).first();
+    if (existing) return existing.id;
     
-    const dirId = await dirStore().add({ name: name || '', email });
-    return { id: dirId, name: name || '', email };
+    return await usersStore().add({ email });
   }
 
-  // --- Availability / Agents Operations ---
+  // --- AI Models ---
 
   async function getAgents() {
     try {
-      const availabilities = await store().toArray();
-      const directories = await dirStore().toArray();
+      const models = await modelsStore().toArray();
+      const users = await usersStore().toArray();
       
-      const dirIndex = {};
-      for (const d of directories) {
-        dirIndex[d.id] = d;
+      const userIndex = {};
+      for (const u of users) {
+        userIndex[u.id] = u;
       }
 
       // Join
-      return availabilities.map(a => {
-        const dir = dirIndex[a.directory_id] || { name: 'Desconocido', email: 'Desconocido' };
+      return models.map(m => {
+        const user = userIndex[m.user_id] || { email: 'Desconocido' };
         return {
-          ...a,
-          name: dir.name,
-          email: dir.email
+          ...m,
+          email: user.email
         };
       });
     } catch (err) {
@@ -128,53 +123,59 @@
     }
   }
 
-  async function addAvailability({ directory_id, restart_hour, owner_email, start_date }) {
-    if (!directory_id || !restart_hour) {
-      throw new Error('Agente y hora de reinicio son requeridos.');
+  async function addAiAssignment(user_id, model_name, restart_hour, start_date) {
+    if (!user_id || !model_name || !restart_hour) {
+      throw new Error('Agente, modelo y hora de reinicio son obligatorios.');
     }
     
-    const numDirId = Number(directory_id);
-    const dirEntry = await dirStore().get(numDirId);
-    if (!dirEntry) throw new Error('Agente no encontrado en el directorio.');
+    const numId = Number(user_id);
+    const userEntry = await usersStore().get(numId);
+    if (!userEntry) throw new Error('Usuario no encontrado.');
+
+    // Pre-check to avoid duplicates of the SAME model for the SAME user
+    const existingModels = await modelsStore().where({ user_id: numId }).toArray();
+    if (existingModels.some(m => m.model_name === model_name)) {
+      throw new Error(`El modelo ${model_name} ya está asignado a este correo.`);
+    }
 
     const now = new Date().toISOString();
-    const availability = {
-      directory_id: numDirId,
+    const assignment = {
+      user_id: numId,
+      model_name,
       restart_hour,
-      owner_email: (owner_email && owner_email.trim()) || '',
       status: 'no disponible',
       last_update: now,
       start_date: start_date || null
     };
 
-    const id = await store().add(availability);
+    const id = await modelsStore().add(assignment);
     
     // Record creation in history
     await histStore().add({
-      agent_id: id,
+      model_id: id,
       old_status: 'nuevo',
       new_status: 'no disponible',
       change_time: now,
-      reason: 'asignación de disponibilidad'
+      reason: 'asignación inicial de modelo'
     });
 
-    return { ...availability, id, name: dirEntry.name, email: dirEntry.email };
+    return { ...assignment, id, email: userEntry.email };
   }
 
   async function updateAgentManual(id, status) {
     const numId = Number(id);
-    const agent = await store().get(numId);
-    if (!agent) throw new Error('Disponibilidad no encontrada.');
+    const agent = await modelsStore().get(numId);
+    if (!agent) throw new Error('Instancia de modelo no encontrada.');
 
     const oldStatus = agent.status;
     if (oldStatus === status) return agent; 
 
     agent.status = status;
     agent.last_update = new Date().toISOString();
-    await store().put(agent);
+    await modelsStore().put(agent);
 
     await histStore().add({
-      agent_id: numId,
+      model_id: numId,
       old_status: oldStatus,
       new_status: status,
       change_time: agent.last_update,
@@ -186,8 +187,8 @@
 
   async function refreshAgent(id, reference_datetime) {
     const numId = Number(id);
-    const agent = await store().get(numId);
-    if (!agent) throw new Error('Disponibilidad no encontrada.');
+    const agent = await modelsStore().get(numId);
+    if (!agent) throw new Error('Instancia de modelo no encontrada.');
 
     const ref = new Date(reference_datetime);
     const [hh, mm] = agent.restart_hour.split(':').map(Number);
@@ -201,10 +202,10 @@
       const oldStatus = agent.status;
       agent.status = 'disponible';
       agent.last_update = ref.toISOString();
-      await store().put(agent);
+      await modelsStore().put(agent);
 
       await histStore().add({
-        agent_id: numId,
+        model_id: numId,
         old_status: oldStatus,
         new_status: 'disponible',
         change_time: agent.last_update,
@@ -218,56 +219,63 @@
   async function getHistory(id) {
     if (!id) return await histStore().toArray();
     const numId = Number(id);
-    return await histStore().where('agent_id').equals(numId).reverse().sortBy('change_time');
+    return await histStore().where('model_id').equals(numId).reverse().sortBy('change_time');
   }
 
   async function deleteAgent(id) {
     const numId = Number(id);
-    await histStore().where('agent_id').equals(numId).delete();
-    await store().delete(numId);
+    await histStore().where('model_id').equals(numId).delete();
+    await modelsStore().delete(numId);
   }
 
   // --- Data Management ---
 
   async function exportData() {
     return {
-      version: 3,
+      version: 4,
       exported_at: new Date().toISOString(),
-      directory: await dirStore().toArray(),
-      agents: await store().toArray(),
+      users: await usersStore().toArray(),
+      ai_models: await modelsStore().toArray(),
       history: await histStore().toArray()
     };
   }
 
-  // Simple hard-reset import logic for v3
   async function importData(data) {
     if (!data) throw new Error('Datos inválidos.');
     
-    const directories = data.directory || [];
-    const agents = data.agents || [];
+    const users = data.users || [];
+    const aiModels = data.ai_models || [];
     const history = data.history || [];
 
-    await db.transaction('rw', dirStore(), store(), histStore(), async () => {
-      await dirStore().clear();
-      await store().clear();
+    await db.transaction('rw', usersStore(), modelsStore(), histStore(), async () => {
+      await usersStore().clear();
+      await modelsStore().clear();
       await histStore().clear();
       
-      if (directories.length) await dirStore().bulkAdd(directories);
-      if (agents.length) await store().bulkAdd(agents);
+      if (users.length) await usersStore().bulkAdd(users);
+      if (aiModels.length) await modelsStore().bulkAdd(aiModels);
       if (history.length) await histStore().bulkAdd(history);
     });
   }
 
   async function seedIfNeeded() {
-    const count = await dirStore().count();
+    const count = await usersStore().count();
     if (count === 0) {
-      const dirId = await dirStore().add({ name: 'Agente Demo', email: 'demo@ejemplo.com' });
+      const uId = await usersStore().add({ email: 'demo@ejemplo.com' });
       const now = new Date().toISOString();
-      await store().add({
-        directory_id: dirId,
+      await modelsStore().add({
+        user_id: uId,
+        model_name: 'Gemini Pro',
         restart_hour: '08:00',
-        owner_email: 'demo@ejemplo.com',
         status: 'disponible',
+        last_update: now,
+        start_date: now
+      });
+      await modelsStore().add({
+        user_id: uId,
+        model_name: 'Copilot',
+        restart_hour: '12:00',
+        status: 'no disponible',
         last_update: now,
         start_date: now
       });
@@ -275,19 +283,18 @@
   }
 
   async function getStats() {
-    const agents = await store().toArray();
-    const total = agents.length;
-    const available = agents.filter(a => a.status === 'disponible').length;
+    const models = await modelsStore().toArray();
+    const total = models.length;
+    const available = models.filter(a => a.status === 'disponible').length;
     const unavailable = total - available;
     return { total, available, unavailable };
   }
 
   // --- Public API ---
   window.localApi = {
-    getDirectoryAgents,
-    addDirectoryAgent,
+    createOrGetUser,
+    addAiAssignment,
     getAgents,
-    addAvailability,
     updateAgentManual,
     refreshAgent,
     getHistory,

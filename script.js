@@ -7,17 +7,10 @@
 document.addEventListener('DOMContentLoaded', () => {
   // --- DOM References ---
   const emailInput      = document.getElementById('email');
-  const nameInput       = document.getElementById('agent_name');
-  const directorySelect = document.getElementById('directory_id');
-  const startDateInput  = document.getElementById('start_date');
-  const restartInput    = document.getElementById('restart_hour');
-  const ownerEmailInput = document.getElementById('owner_email');
-  
-  const addDirBtn       = document.getElementById('add-directory-agent');
-  const addAvailBtn     = document.getElementById('add-availability');
-  
-  const dirFormStatus   = document.getElementById('dir-form-status');
-  const availFormStatus = document.getElementById('avail-form-status');
+  const addBtn          = document.getElementById('add-btn');
+  const formStatus      = document.getElementById('form-status');
+
+  const modelCheckboxes = document.querySelectorAll('.model-cb');
 
   const tbody           = document.querySelector('#agents-table tbody');
   const historySection  = document.getElementById('history-section');
@@ -31,12 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const statAvailable   = document.getElementById('stat-available');
   const statUnavailable = document.getElementById('stat-unavailable');
 
-  // Data action buttons
   const seedBtn   = document.getElementById('seed-btn');
   const exportBtn = document.getElementById('export-btn');
   const importBtn = document.getElementById('import-btn');
 
-  // --- State ---
   let cachedAgents = [];
 
   // --- Notifications ---
@@ -85,6 +76,91 @@ document.addEventListener('DOMContentLoaded', () => {
     }, stepTime);
   }
 
+  // --- UI Interactivity ---
+  modelCheckboxes.forEach(cb => {
+    cb.addEventListener('change', (e) => {
+      const parent = cb.closest('.model-row');
+      const settings = parent.querySelector('.model-settings');
+      if (cb.checked) {
+        settings.style.display = 'grid';
+        parent.style.borderColor = 'var(--accent)';
+      } else {
+        settings.style.display = 'none';
+        parent.style.borderColor = 'var(--border)';
+      }
+    });
+  });
+
+  // --- Add Assignments ---
+  addBtn?.addEventListener('click', async () => {
+    const email = emailInput.value.trim();
+    if (formStatus) formStatus.textContent = '';
+    
+    if (!email) { showNotification('El correo es requerido.', 'warning'); emailInput.focus(); return; }
+    
+    // Collect checked models
+    const checkedModels = [];
+    modelCheckboxes.forEach(cb => {
+      if (cb.checked) {
+        const parent = cb.closest('.model-row');
+        checkedModels.push({
+          model_name: cb.value,
+          start_date: parent.querySelector('.model-date').value,
+          restart_hour: parent.querySelector('.model-time').value
+        });
+      }
+    });
+
+    if (checkedModels.length === 0) {
+      showNotification('Selecciona al menos un modelo de IA.', 'warning');
+      return;
+    }
+
+    // Validate times
+    for (const m of checkedModels) {
+      if (!m.restart_hour) {
+        showNotification(`Hora de reinicio requerida para ${m.model_name}`, 'warning');
+        return;
+      }
+    }
+
+    addBtn.disabled = true;
+    addBtn.textContent = '⏳ Guardando...';
+    
+    try {
+      const numUserId = await window.localApi.createOrGetUser(email);
+      let successCount = 0;
+
+      for (const m of checkedModels) {
+        try {
+          // Normalize start_date
+          const sDate = m.start_date ? new Date(m.start_date).toISOString() : null;
+          await window.localApi.addAiAssignment(numUserId, m.model_name, m.restart_hour, sDate);
+          successCount++;
+        } catch (e) {
+          showNotification(`Error asignando ${m.model_name}: ${e.message}`, 'error');
+        }
+      }
+
+      if (successCount > 0) {
+        showNotification(`✅ Se asignaron ${successCount} modelos al correo`, 'success');
+        // Reset form completely
+        emailInput.value = '';
+        modelCheckboxes.forEach(cb => {
+          cb.checked = false;
+          cb.dispatchEvent(new Event('change')); // Trigger hide
+        });
+        await fetchAgents();
+      }
+    } catch (err) {
+      showNotification(err?.message || 'Error', 'error');
+    } finally {
+      addBtn.disabled = false;
+      addBtn.textContent = '💾 Guardar Asignaciones';
+    }
+  });
+
+
   // --- Render Agents Table ---
   function renderAgents(agents, loading = false) {
     tbody.innerHTML = '';
@@ -93,7 +169,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tbody.innerHTML = `
         <tr>
           <td colspan="7" class="loading-text">
-            <span class="spinner"></span> Cargando disponibilidades...
+            <span class="spinner"></span> Cargando instancias de IA...
           </td>
         </tr>`;
       return;
@@ -104,8 +180,8 @@ document.addEventListener('DOMContentLoaded', () => {
         <tr>
           <td colspan="7">
             <div class="empty-state">
-              <div class="empty-state-icon">📭</div>
-              <div class="empty-state-text">No hay turnos registrados.<br>Crea un agente y asígnale disponibilidad arriba.</div>
+              <div class="empty-state-icon">🤖</div>
+              <div class="empty-state-text">No hay modelos IA asignados.<br>Usa el formulario superior para asignar accesos a un usuario.</div>
             </div>
           </td>
         </tr>`;
@@ -138,10 +214,10 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       tr.innerHTML = `
-        <td data-label="Correo">
-          <a href="#" class="agent-email history-link" data-id="${a.id}" aria-label="Ver historial">${a.email}</a>
+        <td data-label="Correo (Usuario)">
+          <a href="#" class="agent-email history-link" data-id="${a.id}" aria-label="Ver historial de modelo">${a.email}</a>
         </td>
-        <td data-label="Nombre">${a.name || '—'}</td>
+        <td data-label="Modelo de IA"><strong>${a.model_name || '—'}</strong></td>
         <td data-label="Fecha Inicio">${startDate}</td>
         <td data-label="Reinicio">${a.restart_hour}</td>
         <td data-label="Estado">
@@ -153,36 +229,20 @@ document.addEventListener('DOMContentLoaded', () => {
         <td data-label="Última Actualización">${lastUpdate}</td>
         <td data-label="Acciones">
           <div class="cell-actions">
-            <button data-id="${a.id}" class="btn btn-ghost btn-sm refresh-btn" aria-label="Actualizar agente" title="Actualizar">🔄</button>
-            <select data-id="${a.id}" class="force-select" aria-label="Estado">
+            <button data-id="${a.id}" class="btn btn-ghost btn-sm refresh-btn" aria-label="Actualizar modelo" title="Comprobar reinicio">🔄</button>
+            <select data-id="${a.id}" class="force-select" aria-label="Cambiar estado manual">
               <option value="disponible" ${isAvailable ? 'selected' : ''}>Disponible</option>
               <option value="no disponible" ${!isAvailable ? 'selected' : ''}>No disponible</option>
             </select>
-            <button data-id="${a.id}" class="btn btn-primary btn-sm force-btn" aria-label="Forzar estado" title="Forzar estado">⚡</button>
-            <button data-id="${a.id}" class="btn btn-danger btn-sm delete-btn" aria-label="Eliminar turno" title="Eliminar Turno">🗑️</button>
+            <button data-id="${a.id}" class="btn btn-primary btn-sm force-btn" title="Forzar estado">⚡</button>
+            <button data-id="${a.id}" class="btn btn-danger btn-sm delete-btn" title="Remover de este usuario">🗑️</button>
           </div>
         </td>`;
       tbody.appendChild(tr);
     });
   }
 
-  // --- Fetch & Render ---
-  async function loadDirectory() {
-    if (!window.localApi?.getDirectoryAgents || !directorySelect) return;
-    try {
-      const dirs = await window.localApi.getDirectoryAgents();
-      directorySelect.innerHTML = '<option value="">-- Seleccionar agente --</option>';
-      dirs.forEach(d => {
-        const opt = document.createElement('option');
-        opt.value = d.id;
-        opt.textContent = `${d.name || d.email} (${d.email})`;
-        directorySelect.appendChild(opt);
-      });
-    } catch(err) {
-      console.error(err);
-    }
-  }
-
+  // --- Fetch ---
   async function fetchAgents() {
     renderAgents([], true);
     if (!window.localApi?.getAgents) {
@@ -195,69 +255,10 @@ document.addEventListener('DOMContentLoaded', () => {
       await updateStats();
     } catch (err) {
       console.error('[fetchAgents]', err);
-      showNotification('Error cargando agentes: ' + (err?.message || err), 'error');
+      showNotification('Error cargando datos: ' + (err?.message || err), 'error');
       renderAgents([], false);
     }
   }
-
-  // --- Add Directory Agent ---
-  addDirBtn?.addEventListener('click', async () => {
-    const name = nameInput.value.trim();
-    const email = emailInput.value.trim();
-    if (dirFormStatus) dirFormStatus.textContent = '';
-    
-    if (!email) { showNotification('El correo es requerido.', 'warning'); emailInput.focus(); return; }
-    
-    addDirBtn.disabled = true;
-    addDirBtn.textContent = '⏳ Registrando...';
-    try {
-      await window.localApi.addDirectoryAgent(name, email);
-      emailInput.value = '';
-      nameInput.value = '';
-      showNotification('✅ Agente agregado al directorio', 'success');
-      await loadDirectory();
-    } catch (err) {
-      showNotification(err?.message || 'Error', 'error');
-    } finally {
-      addDirBtn.disabled = false;
-      addDirBtn.textContent = '➕ Registrar Agente';
-    }
-  });
-
-  // --- Add Availability Schedule ---
-  addAvailBtn?.addEventListener('click', async () => {
-    const dirId = directorySelect.value;
-    const start = startDateInput.value ? new Date(startDateInput.value).toISOString() : null;
-    const restart = restartInput.value.trim();
-    const owner = ownerEmailInput.value.trim();
-    if (availFormStatus) availFormStatus.textContent = '';
-
-    if (!dirId) { showNotification('Selecciona un agente del directorio', 'warning'); directorySelect.focus(); return; }
-    if (!restart) { showNotification('Hora de reinicio requerida', 'warning'); restartInput.focus(); return; }
-
-    addAvailBtn.disabled = true;
-    addAvailBtn.textContent = '⏳ Asignando...';
-    try {
-      await window.localApi.addAvailability({
-        directory_id: dirId,
-        start_date: start,
-        restart_hour: restart,
-        owner_email: owner
-      });
-      startDateInput.value = '';
-      restartInput.value = '';
-      ownerEmailInput.value = '';
-      directorySelect.value = '';
-      showNotification('✅ Horario de disponibilidad asignado', 'success');
-      await fetchAgents();
-    } catch(err) {
-      showNotification(err?.message || 'Error', 'error');
-    } finally {
-      addAvailBtn.disabled = false;
-      addAvailBtn.textContent = '📅 Asignar Horario';
-    }
-  });
-
 
   // --- History ---
   function showHistory(id) {
@@ -272,7 +273,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.localApi.getHistory(id).then(hist => {
       if (!hist || hist.length === 0) {
-        historyContent.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div><div class="empty-state-text">No hay cambios registrados para este turno.</div></div>';
+        historyContent.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div><div class="empty-state-text">No hay cambios registrados en este modelo para este usuario.</div></div>';
         return;
       }
 
@@ -306,7 +307,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  // --- Close History ---
   closeHistoryBtn?.addEventListener('click', () => {
     historySection.style.display = 'none';
   });
@@ -315,7 +315,6 @@ document.addEventListener('DOMContentLoaded', () => {
   document.querySelector('#agents-table').addEventListener('click', (ev) => {
     const t = ev.target;
 
-    // History link
     if (t.classList.contains('history-link')) {
       ev.preventDefault();
       const id = t.getAttribute('data-id');
@@ -323,20 +322,18 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Refresh single agent
     if (t.classList.contains('refresh-btn') || t.closest('.refresh-btn')) {
       const btn = t.classList.contains('refresh-btn') ? t : t.closest('.refresh-btn');
       const id = btn.getAttribute('data-id');
       btn.disabled = true;
       const nowIso = new Date().toISOString();
       window.localApi?.refreshAgent?.(id, nowIso)
-        .then(() => { fetchAgents(); showNotification('Turno actualizado', 'success', 2000); })
+        .then(() => { fetchAgents(); showNotification('Chequeo actualizado', 'success', 2000); })
         .catch(err => showNotification('Error: ' + (err?.message || err), 'error'))
         .finally(() => { btn.disabled = false; });
       return;
     }
 
-    // Force status using the select
     if (t.classList.contains('force-btn') || t.closest('.force-btn')) {
       const btn = t.classList.contains('force-btn') ? t : t.closest('.force-btn');
       const id = btn.getAttribute('data-id');
@@ -346,29 +343,28 @@ document.addEventListener('DOMContentLoaded', () => {
       const newStatus = select.value;
       btn.disabled = true;
       window.localApi?.updateAgentManual?.(id, newStatus)
-        .then(() => { fetchAgents(); showNotification(`Estado cambiado a "${newStatus}"`, 'success', 2500); })
+        .then(() => { fetchAgents(); showNotification(`Cambiado a "${newStatus}"`, 'success', 2500); })
         .catch(err => showNotification('Error: ' + (err?.message || err), 'error'))
         .finally(() => { btn.disabled = false; });
       return;
     }
 
-    // Delete availability
     if (t.classList.contains('delete-btn') || t.closest('.delete-btn')) {
       const btn = t.classList.contains('delete-btn') ? t : t.closest('.delete-btn');
       const id = btn.getAttribute('data-id');
-      if (!confirm('¿Estás seguro de eliminar este turno de disponibilidad?\nEl agente seguirá existiendo en el directorio.')) return;
+      if (!confirm('¿Eliminar esta instancia de Inteligencia Artificial para este usuario?\nSe borrará su estado y hora.')) return;
       btn.disabled = true;
       window.localApi?.deleteAgent?.(id)
-        .then(() => { fetchAgents(); showNotification('Turno eliminado', 'info', 2500); })
+        .then(() => { fetchAgents(); showNotification('Modelo desasignado', 'info', 2500); })
         .catch(err => showNotification('Error: ' + (err?.message || err), 'error'))
         .finally(() => { btn.disabled = false; });
     }
   });
 
-  // --- Refresh All ---
+  // --- Actions ---
   refreshAllBtn?.addEventListener('click', async () => {
     refreshAllBtn.disabled = true;
-    refreshAllBtn.textContent = '⏳ Actualizando...';
+    refreshAllBtn.textContent = '⏳ Evaluando...';
     const nowIso = new Date().toISOString();
     let updated = 0;
 
@@ -378,7 +374,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (result.status === 'disponible' && agent.status !== 'disponible') updated++;
       }
       await fetchAgents();
-      showNotification(`Actualización completa. ${updated} agente(s) cambiaron a disponible.`, 'success');
+      showNotification(`Evaluación terminada. ${updated} modelos habilitados por hora.`, 'success');
     } catch (err) {
       showNotification('Error: ' + (err?.message || err), 'error');
     } finally {
@@ -387,39 +383,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // --- Seed ---
   seedBtn?.addEventListener('click', async () => {
     try {
       await window.localApi.seedIfNeeded();
       await fetchAgents();
-      await loadDirectory();
-      showNotification('Datos de ejemplo cargados', 'success');
+      showNotification('Datos de prueba cargados', 'success');
     } catch (err) {
       showNotification('Error: ' + (err?.message || err), 'error');
     }
   });
 
-  // --- Export ---
   exportBtn?.addEventListener('click', async () => {
     try {
       const data = await window.localApi.exportData();
       const json = JSON.stringify(data, null, 2);
-
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `agentes_backup_${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = `bd_cuentas_ia_${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
-
-      showNotification('Datos exportados como archivo JSON', 'success');
+      showNotification('Exportado correctamente', 'success');
     } catch (err) {
-      showNotification('Error exportando: ' + (err?.message || err), 'error');
+      showNotification('Error: ' + (err?.message || err), 'error');
     }
   });
 
-  // --- Import ---
   importBtn?.addEventListener('click', () => {
     const fileInput = document.createElement('input');
     fileInput.type = 'file';
@@ -430,11 +420,10 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const text = await file.text();
         const data = JSON.parse(text);
-        if (!confirm(`¿Importar ${data.directory?.length || 0} agentes y sus disponibilidades?\nEsto reemplazará los datos actuales.`)) return;
+        if (!confirm(`¿Importar ${data.users?.length || 0} usuarios y sus modelos?\nEsto REEMPLAZARÁ la base de datos actual.`)) return;
         await window.localApi.importData(data);
         await fetchAgents();
-        await loadDirectory();
-        showNotification('Datos importados correctamente', 'success');
+        showNotification('Importación exitosa', 'success');
       } catch (err) {
         showNotification('Error importando: ' + (err?.message || err), 'error');
       }
@@ -443,6 +432,5 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // --- Initial Load ---
-  loadDirectory();
   fetchAgents();
 });
