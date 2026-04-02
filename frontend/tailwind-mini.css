@@ -1,0 +1,22 @@
+/* Minimal, offline-tailwind-like utilities (subset) */
+.tw-flex { display: flex; }
+.tw-flex-row { flex-direction: row; }
+.tw-items-center { align-items: center; }
+.tw-justify-between { justify-content: space-between; }
+.tw-gap-2 { gap: 0.5rem; }
+.tw-p-4 { padding: 1rem; }
+.tw-px-4 { padding-left: 1rem; padding-right: 1rem; }
+.tw-py-2 { padding-top: .5rem; padding-bottom: .5rem; }
+.tw-p-2 { padding: .5rem; }
+.tw-w-full { width: 100%; }
+.tw-overflow-x-auto { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tw-bg-gray-800 { background-color: #2d3748; }
+.tw-text-white { color: #fff; }
+.tw-text-sm { font-size: .875rem; }
+.tw-rounded { border-radius: .25rem; }
+.tw-card { border: 1px solid #ddd; padding: 1rem; border-radius: .5rem; background: #fff; }
+.tw-btn { padding: .75rem 1rem; border-radius: .5rem; border: 0; background: #3498db; color: #fff; cursor: pointer; }
+.tw-btn.secondary { background: #7f8c8d; }
+.tw-label { font-weight: 600; }
+.tw-container { max-width: 1000px; margin: 0 auto; padding: 0 1rem; }
+.tw-mb-4 { margin-bottom: 1rem; }

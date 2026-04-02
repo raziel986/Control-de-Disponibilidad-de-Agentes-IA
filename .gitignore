@@ -1,0 +1,28 @@
+# Python
+venv/
+env/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# OS / IDE
+Thumbs.db
+.DS_Store
+.vscode/
+.idea/
+
+# Data and dumps
+*.db
+*.sqlite
+
+# Logs
+*.log
+
+# Misc
+node_modules/
+dist/
+build/
+coverage/

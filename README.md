@@ -140,3 +140,11 @@ Este proyecto está bajo la Licencia MIT - ver el archivo [LICENSE](LICENSE) par
 ## Soporte
 
 Para problemas o preguntas, abre un issue en: https://github.com/tu-usuario/Disponibilidad-de-Agentes/issues
+### Servidor HTTPS LAN para móvil (opcional)
+- Para permitir instalación en móvil cuando la app se sirve en una red local, puedes servir con HTTPS en la LAN.
+- Requiere certificados TLS: genera server.crt y server.key (por ejemplo con OpenSSL) y usa el script de servidor HTTPS reducido.
+- Comandos sugeridos (unix-like):
+-   ./scripts/generate_self_signed_certs.sh
+-   python3 scripts/run_https_local.py 8443 ./frontend
+- En Android, con Chrome, visita la URL: https://<lan-ip>:8443/ y deberías ver la opción de instalar la PWA si está eligible.
+- Nota: Android exige HTTPS para el install; si usas un IP LAN, usa un certificado autofirmado que sea confiable en el dispositivo (instalando CA si es posible) o utiliza un certificado válido para el dominio local.

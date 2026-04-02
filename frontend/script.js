@@ -38,6 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
       tbody.appendChild(tr);
       return;
     }
+    // Cache agents for potential re-render when toggling grouping
+    window.__cachedAgents__ = agents;
     agents.forEach(a => {
       const tr = document.createElement('tr');
       const statusLabel = a.status === 'disponible' ? 'Disponible' : 'No disponible';
@@ -47,18 +49,20 @@ document.addEventListener('DOMContentLoaded', () => {
         try { lastUpdateFormatted = new Date(a.last_update).toLocaleString('es-ES'); } catch(e) { lastUpdateFormatted = a.last_update; }
       }
       tr.innerHTML = `
-        <td><a href="#" data-email="${a.email}" class="history-link" style="color:#3498db;text-decoration:none;">${a.email}</a></td>
-        <td>${a.restart_hour}</td>
-        <td><span class="${badgeClass}">${statusLabel}</span></td>
-        <td>${lastUpdateFormatted}</td>
-        <td>
-          <button data-email="${a.email}" class="refresh-btn" style="margin-right:4px;">Actualizar</button>
-          <button data-email="${a.email}" class="toggle-manual-btn" style="margin-right:4px;">Forzar</button>
-          <select data-email="${a.email}" class="force-select" style="margin-right:4px;padding:4px;">
+        <td data-label="Correo"><a href="#" data-id="${a.id}" data-email="${a.email}" class="history-link" style="color:#3498db;text-decoration:none;">${a.email}</a></td>
+        <td data-label="Nombre">${a.name || ''}</td>
+        <td data-label="Fecha Inicio">${a.start_date ? (new Date(a.start_date).toLocaleDateString('es-ES')) : ''}</td>
+        <td data-label="Reinicio">${a.restart_hour}</td>
+        <td data-label="Estado"><span class="${badgeClass}">${statusLabel}</span></td>
+        <td data-label="Última actualización">${lastUpdateFormatted}</td>
+        <td data-label="Acciones">
+          <button data-id="${a.id}" data-email="${a.email}" class="refresh-btn" style="margin-right:4px;">Actualizar</button>
+          <button data-id="${a.id}" data-email="${a.email}" class="toggle-manual-btn" style="margin-right:4px;">Forzar</button>
+          <select data-id="${a.id}" data-email="${a.email}" class="force-select" style="margin-right:4px;padding:4px;">
             <option value="disponible">Disponible</option>
             <option value="no disponible">No disponible</option>
           </select>
-          <button data-email="${a.email}" class="delete-btn" style="background:#e74c3c;margin-left:4px;">Eliminar</button>
+          <button data-id="${a.id}" data-email="${a.email}" class="delete-btn" style="background:#e74c3c;margin-left:4px;">Eliminar</button>
         </td>
       `;
       tbody.appendChild(tr);
@@ -70,10 +74,17 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.localApi?.getAgents) {
       try {
         const agents = await window.localApi.getAgents();
-        renderAgents(agents || []);
+        const list = Array.isArray(agents) ? agents : [];
+        renderAgents(list);
       } catch (err) {
+        console.error('fetchAgents error', err);
         showNotification('Error leyendo agentes offline: ' + (err?.message||err), 'error');
+        // Fallback to empty view to avoid stuck loading state
+        renderAgents([], false);
       }
+    } else {
+      // No local API available
+      renderAgents([], false);
     }
   }
 
@@ -106,29 +117,51 @@ document.addEventListener('DOMContentLoaded', () => {
     const t = ev.target;
     if (t.classList.contains('history-link')) {
       ev.preventDefault();
-      showHistory(t.getAttribute('data-email'));
+      showHistory(t.getAttribute('data-id'));
     } else if (t.classList.contains('refresh-btn')) {
-      const email = t.getAttribute('data-email'); const btn = t; btn.disabled = true; const nowIso = new Date().toISOString(); window.localApi?.refreshAgent?.(email, nowIso).then(()=> fetchAgents()).catch(err => showNotification('Error: '+ (err?.message||err),'error')).finally(()=>{ btn.disabled=false; });
+      const id = t.getAttribute('data-id'); const btn = t; btn.disabled = true; const nowIso = new Date().toISOString(); window.localApi?.refreshAgent?.(id, nowIso).then(()=> fetchAgents()).catch(err => showNotification('Error: '+ (err?.message||err),'error')).finally(()=>{ btn.disabled=false; });
     } else if (t.classList.contains('toggle-manual-btn')) {
-      const email = t.getAttribute('data-email'); const btn = t; const status = prompt('Forzar estado: disponible o no disponible'); if (status === 'disponible' || status === 'no disponible') { btn.disabled = true; window.localApi?.updateAgentManual?.(email, status).then(()=> fetchAgents()).catch(err => showNotification('Error: '+ (err?.message||err),'error')).finally(()=>{ btn.disabled=false; }); }
+      const id = t.getAttribute('data-id'); const btn = t; const status = prompt('Forzar estado: disponible o no disponible'); if (status === 'disponible' || status === 'no disponible') { btn.disabled = true; window.localApi?.updateAgentManual?.(id, status).then(()=> fetchAgents()).catch(err => showNotification('Error: '+ (err?.message||err),'error')).finally(()=>{ btn.disabled=false; }); }
     } else if (t.classList.contains('delete-btn')) {
-      const email = t.getAttribute('data-email'); if (confirm(`¿Está seguro de eliminar al agente ${email}? Esta acción no se puede deshacer.`)) {
-        window.localApi?.deleteAgent?.(email).then(()=> fetchAgents()).catch(err => showNotification('Error: '+ (err?.message||err),'error'));
+      const id = t.getAttribute('data-id'); if (confirm(`¿Está seguro de eliminar al agente con ID ${id}? Esta acción no se puede deshacer.`)) {
+        window.localApi?.deleteAgent?.(id).then(()=> fetchAgents()).catch(err => showNotification('Error: '+ (err?.message||err),'error'));
       }
     }
   });
 
   addBtn.addEventListener('click', () => {
     const email = emailInput.value.trim(); const restart = restartInput.value.trim();
+    const nameInput = document.getElementById('agent_name');
+    const startDateInput = document.getElementById('start_date');
+    const ownerEmailInput = document.getElementById('owner_email');
+    const agent_name = (nameInput && nameInput.value.trim()) || '';
+    const start_date = (startDateInput && startDateInput.value) ? new Date(startDateInput.value).toISOString() : (null);
+    const owner_email = (ownerEmailInput && ownerEmailInput.value.trim()) || '';
     formStatus.textContent = '';
     if (!email) { showNotification('El correo es requerido.', 'warning'); return; }
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/; if (!emailRegex.test(email)) { showNotification('El correo debe tener un formato válido.', 'warning'); return; }
     if (!restart) { showNotification('La hora de reinicio es requerida.', 'warning'); return; }
     const timeRegex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/; if (!timeRegex.test(restart)) { showNotification('La hora debe estar en formato HH:MM (ej: 08:30).', 'warning'); return; }
-    window.localApi?.addAgent?.({ email, restart_hour: restart }).then(()=>{ emailInput.value=''; restartInput.value=''; fetchAgents(); }).catch(err => showNotification('Error: '+(err?.message||err),'error'));
+    window.localApi?.addAgent?.({ email, restart_hour: restart, owner_email, name: agent_name, start_date }).then(()=>{ emailInput.value=''; restartInput.value=''; if (nameInput) nameInput.value=''; if (startDateInput) startDateInput.value=''; if (ownerEmailInput) ownerEmailInput.value=''; fetchAgents(); }).catch(err => showNotification('Error: '+(err?.message||err),'error'));
   });
 
   // Initial load
+  const GROUP_KEY = 'groupByOwner';
+  let groupByOwner = localStorage.getItem(GROUP_KEY) === 'true';
+  function renderGroupsToggle(){
+    const btn = document.getElementById('group-by-owner');
+    if (!btn) return;
+    btn.textContent = groupByOwner ? 'Agrupar: activado' : 'Agrupar por correo';
+  }
+  function toggleGroupByOwner(){
+    groupByOwner = !groupByOwner; localStorage.setItem(GROUP_KEY, String(groupByOwner)); renderGroupsToggle(); renderAgents( ( window.__cachedAgents__ || [] ), false );
+  }
+  // Expose a cached agents array for re-rendering when toggling
+  window.__cachedAgents__ = [];
+  document.addEventListener('DOMContentLoaded', () => {
+    const btnGroup = document.getElementById('group-by-owner');
+    if (btnGroup) btnGroup.addEventListener('click', toggleGroupByOwner);
+  });
   fetchAgents();
 
   // Mobile/offline utilities: seed/export/import

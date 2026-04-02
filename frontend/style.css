@@ -5,8 +5,20 @@
 @media (max-width: 600px) {
   body { font-size: 14px; }
   .container { padding: 0 12px; }
-  input, select, button { width: 100%; }
-  #agents-table { width: 100%; overflow-x: auto; display: block; }
+  input, select, button { width: 100%; display: block; }
+  .table-wrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   th, td { padding: 8px; }
   header { padding: 12px; flex-wrap: wrap; }
+  /* Table to cards on mobile */
+  #agents-table, #agents-table thead, #agents-table tbody, #agents-table tr, #agents-table td, #agents-table th { display: block; }
+  #agents-table thead { display: none; }
+  #agents-table tr { border: 1px solid #ddd; margin: 8px 0; padding: 8px; border-radius: 8px; }
+  #agents-table td { padding: 8px 6px; border: 0; position: relative; padding-left: 40%; }
+  #agents-table td:before {
+    content: attr(data-label);
+    position: absolute;
+    left: 8px;
+    width: 40%;
+    font-weight: bold;
+  }
 }

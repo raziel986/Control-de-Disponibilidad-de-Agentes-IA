@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
+  <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Disponibilidad de Agentes</title>
+  <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'><rect width='32' height='32' fill='%232c3e50'/><circle cx='16' cy='16' r='8' fill='white'/></svg>" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#2c3e50" />
   <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="/tailwind-mini.css" />
   <script src="https://unpkg.com/dexie@3/dist/dexie.min.js"></script>
   <script src="/api_local.js" defer></script>
   <script defer src="/script.js"></script>
@@ -28,24 +30,24 @@
   </style>
 </head>
 <body>
-  <section class="card" id="mobile-actions" style="margin:8px 0;padding:12px;border:1px solid #ddd;border-radius:6px;display:none;">
-    <h3 style="margin:0 0 8px 0;font-size:16px;">Acciones offline</h3>
-    <button id="seed-btn" style="margin-right:8px;">Sembrar datos</button>
-    <button id="export-btn" style="margin-right:8px;">Exportar Dexie</button>
-    <button id="import-btn">Importar Dexie</button>
-  </section>
+  <!-- Las acciones offline han sido removidas para simplificar la UI -->
+  <!-- Observación: favicon.ico no se usa directamente; la app usa el favicon inline SVG o SVG icons -->
   <div id="offline-banner" style="position:fixed;bottom:8px;right:8px;background:#e74c3c;color:white;padding:6px 10px;border-radius:4px;display:none;z-index:9999;"> offline </div>
+  <div id="install-banner" style="display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#2c3e50;color:white;padding:12px 14px;border-radius:6px;z-index:9999;cursor:pointer;">Instalar aplicación</div>
   <header>
     <div>Disponibilidad de Agentes</div>
-    <div id="autostart-toggle" title="Opción de inicio automático (Windows)" style="cursor:default; font-size:0.9em; opacity:.8"></div>
+    <button id="install-btn" style="display:none;position:fixed;bottom:16px;left:50%;transform:translateX(-50%);background:#2c3e50;color:white;border:none;border-radius:6px;padding:12px 14px;z-index:9999;cursor:pointer;">Instalar</button>
   </header>
   <main>
     <div class="container">
-      <section id="agent-form" class="card">
+  <section id="agent-form" class="card">
         <h3>Registrar nuevo agente</h3>
         <div class="form-row">
+          <input type="text" id="agent_name" placeholder="Nombre del agente" />
           <input type="email" id="email" placeholder="Correo (único)" />
+          <input type="date" id="start_date" placeholder="Fecha de incorporación" />
           <input type="text" id="restart_hour" placeholder="Hora de reinicio HH:MM" />
+          <input type="email" id="owner_email" placeholder="Propietario Email (opcional)" />
           <button id="add-agent">Registrar</button>
         </div>
         <div id="form-status" style="margin-top:8px; color:#555"></div>
@@ -53,18 +55,22 @@
 
       <section class="card" id="agents-panel">
         <h3>Agentes</h3>
-        <table id="agents-table">
-          <thead>
-            <tr>
-              <th>Correo</th>
-              <th>Reinicio</th>
-              <th>Estado</th>
-              <th>Última actualización</th>
-              <th>Acciones</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+        <div class="table-wrapper">
+          <table id="agents-table">
+            <thead>
+              <tr>
+                <th>Correo</th>
+                <th>Nombre</th>
+                <th>Fecha Inicio</th>
+                <th>Reinicio</th>
+                <th>Estado</th>
+                <th>Última actualización</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </section>
 
       <section class="card" id="history-section" style="display:none;">
@@ -84,6 +90,52 @@
         });
       });
     }
+    // Install Prompt (mobile) – re-activated: show a banner and trigger native prompt when available
+    let deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      const banner = document.getElementById('install-banner');
+      if (banner) {
+        banner.style.display = 'block';
+      } else {
+        // create banner if not exists
+        const b = document.createElement('div');
+        b.id = 'install-banner';
+        b.style.position = 'fixed';
+        b.style.bottom = '16px';
+        b.style.left = '50%';
+        b.style.transform = 'translateX(-50%)';
+        b.style.background = '#2f6';
+        b.style.color = 'white';
+        b.style.padding = '12px 14px';
+        b.style.borderRadius = '6px';
+        b.style.zIndex = '9999';
+        b.style.cursor = 'pointer';
+        b.textContent = 'Instalar aplicación';
+        b.addEventListener('click', () => {
+          if (deferredInstallPrompt) {
+            deferredInstallPrompt.prompt();
+            deferredInstallPrompt.userChoice.then(() => { deferredInstallPrompt = null; b.style.display = 'none'; });
+          }
+        });
+        document.body.appendChild(b);
+      }
+    });
+
+    window.addEventListener('appinstalled', () => {
+      const banner = document.getElementById('install-banner');
+      if (banner) banner.style.display = 'none';
+    });
+
+    // Clicking banner triggers install prompt (in case the banner exists)
+    document.addEventListener('click', (ev) => {
+      const t = ev.target;
+      const banner = document.getElementById('install-banner');
+      if (t && t.id === 'install-banner' && banner && banner.style.display !== 'none') {
+        // already wired in via banner's own listener, but keep for safety
+      }
+    });
     // Simple online/offline banner
     function updateOnlineStatus() {
       const banner = document.getElementById('offline-banner');
@@ -98,13 +150,36 @@
     window.addEventListener('offline', updateOnlineStatus);
     updateOnlineStatus();
     // Show mobile actions container on small viewports
-    function ensureMobileActionsVisible(){
+  function ensureMobileActionsVisible(){
       const el = document.getElementById('mobile-actions');
+      if (!el) return;
       if (window.innerWidth <= 680) el.style.display = 'block';
       else el.style.display = 'none';
     }
     window.addEventListener('resize', ensureMobileActionsVisible);
     ensureMobileActionsVisible();
+  </script>
+  <script>
+    // Install Prompt (mobile) – basic integration with a visible button
+    let deferredInstallPrompt = null;
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      const btn = document.getElementById('install-btn');
+      if (btn) btn.style.display = 'inline-block';
+    });
+    window.addEventListener('appinstalled', () => {
+      const btn = document.getElementById('install-btn');
+      if (btn) btn.style.display = 'none';
+    });
+    document.getElementById('install-btn')?.addEventListener('click', () => {
+      if (deferredInstallPrompt) {
+        deferredInstallPrompt.prompt();
+        deferredInstallPrompt.userChoice.then(() => { deferredInstallPrompt = null; });
+      } else {
+        alert('Instalar desde el navegador: la PWA debe ser eligible (agregar a inicio).');
+      }
+    });
   </script>
   </body>
 </html>
