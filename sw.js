@@ -3,7 +3,7 @@
    Strategy: Cache-First for assets, Network-First for navigation
    ============================================================ */
 
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const CACHE_NAME = `agents-pwa-${CACHE_VERSION}`;
 
 const ASSETS_TO_CACHE = [

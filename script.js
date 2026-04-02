@@ -7,12 +7,18 @@
 document.addEventListener('DOMContentLoaded', () => {
   // --- DOM References ---
   const emailInput      = document.getElementById('email');
-  const restartInput    = document.getElementById('restart_hour');
   const nameInput       = document.getElementById('agent_name');
+  const directorySelect = document.getElementById('directory_id');
   const startDateInput  = document.getElementById('start_date');
+  const restartInput    = document.getElementById('restart_hour');
   const ownerEmailInput = document.getElementById('owner_email');
-  const addBtn          = document.getElementById('add-agent');
-  const formStatus      = document.getElementById('form-status');
+  
+  const addDirBtn       = document.getElementById('add-directory-agent');
+  const addAvailBtn     = document.getElementById('add-availability');
+  
+  const dirFormStatus   = document.getElementById('dir-form-status');
+  const availFormStatus = document.getElementById('avail-form-status');
+
   const tbody           = document.querySelector('#agents-table tbody');
   const historySection  = document.getElementById('history-section');
   const historyContent  = document.getElementById('history-content');
@@ -87,7 +93,7 @@ document.addEventListener('DOMContentLoaded', () => {
       tbody.innerHTML = `
         <tr>
           <td colspan="7" class="loading-text">
-            <span class="spinner"></span> Cargando agentes...
+            <span class="spinner"></span> Cargando disponibilidades...
           </td>
         </tr>`;
       return;
@@ -99,7 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td colspan="7">
             <div class="empty-state">
               <div class="empty-state-icon">📭</div>
-              <div class="empty-state-text">No hay agentes registrados.<br>Agrega el primero usando el formulario.</div>
+              <div class="empty-state-text">No hay turnos registrados.<br>Crea un agente y asígnale disponibilidad arriba.</div>
             </div>
           </td>
         </tr>`;
@@ -133,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       tr.innerHTML = `
         <td data-label="Correo">
-          <a href="#" class="agent-email history-link" data-id="${a.id}" data-email="${a.email}" aria-label="Ver historial de ${a.email}">${a.email}</a>
+          <a href="#" class="agent-email history-link" data-id="${a.id}" aria-label="Ver historial">${a.email}</a>
         </td>
         <td data-label="Nombre">${a.name || '—'}</td>
         <td data-label="Fecha Inicio">${startDate}</td>
@@ -147,13 +153,13 @@ document.addEventListener('DOMContentLoaded', () => {
         <td data-label="Última Actualización">${lastUpdate}</td>
         <td data-label="Acciones">
           <div class="cell-actions">
-            <button data-id="${a.id}" class="btn btn-ghost btn-sm refresh-btn" aria-label="Actualizar agente ${a.email}" title="Actualizar">🔄</button>
-            <select data-id="${a.id}" class="force-select" aria-label="Estado para ${a.email}">
+            <button data-id="${a.id}" class="btn btn-ghost btn-sm refresh-btn" aria-label="Actualizar agente" title="Actualizar">🔄</button>
+            <select data-id="${a.id}" class="force-select" aria-label="Estado">
               <option value="disponible" ${isAvailable ? 'selected' : ''}>Disponible</option>
               <option value="no disponible" ${!isAvailable ? 'selected' : ''}>No disponible</option>
             </select>
-            <button data-id="${a.id}" class="btn btn-primary btn-sm force-btn" aria-label="Forzar estado de ${a.email}" title="Forzar estado">⚡</button>
-            <button data-id="${a.id}" class="btn btn-danger btn-sm delete-btn" aria-label="Eliminar agente ${a.email}" title="Eliminar">🗑️</button>
+            <button data-id="${a.id}" class="btn btn-primary btn-sm force-btn" aria-label="Forzar estado" title="Forzar estado">⚡</button>
+            <button data-id="${a.id}" class="btn btn-danger btn-sm delete-btn" aria-label="Eliminar turno" title="Eliminar Turno">🗑️</button>
           </div>
         </td>`;
       tbody.appendChild(tr);
@@ -161,6 +167,22 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Fetch & Render ---
+  async function loadDirectory() {
+    if (!window.localApi?.getDirectoryAgents || !directorySelect) return;
+    try {
+      const dirs = await window.localApi.getDirectoryAgents();
+      directorySelect.innerHTML = '<option value="">-- Seleccionar agente --</option>';
+      dirs.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = `${d.name || d.email} (${d.email})`;
+        directorySelect.appendChild(opt);
+      });
+    } catch(err) {
+      console.error(err);
+    }
+  }
+
   async function fetchAgents() {
     renderAgents([], true);
     if (!window.localApi?.getAgents) {
@@ -178,6 +200,65 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // --- Add Directory Agent ---
+  addDirBtn?.addEventListener('click', async () => {
+    const name = nameInput.value.trim();
+    const email = emailInput.value.trim();
+    if (dirFormStatus) dirFormStatus.textContent = '';
+    
+    if (!email) { showNotification('El correo es requerido.', 'warning'); emailInput.focus(); return; }
+    
+    addDirBtn.disabled = true;
+    addDirBtn.textContent = '⏳ Registrando...';
+    try {
+      await window.localApi.addDirectoryAgent(name, email);
+      emailInput.value = '';
+      nameInput.value = '';
+      showNotification('✅ Agente agregado al directorio', 'success');
+      await loadDirectory();
+    } catch (err) {
+      showNotification(err?.message || 'Error', 'error');
+    } finally {
+      addDirBtn.disabled = false;
+      addDirBtn.textContent = '➕ Registrar Agente';
+    }
+  });
+
+  // --- Add Availability Schedule ---
+  addAvailBtn?.addEventListener('click', async () => {
+    const dirId = directorySelect.value;
+    const start = startDateInput.value ? new Date(startDateInput.value).toISOString() : null;
+    const restart = restartInput.value.trim();
+    const owner = ownerEmailInput.value.trim();
+    if (availFormStatus) availFormStatus.textContent = '';
+
+    if (!dirId) { showNotification('Selecciona un agente del directorio', 'warning'); directorySelect.focus(); return; }
+    if (!restart) { showNotification('Hora de reinicio requerida', 'warning'); restartInput.focus(); return; }
+
+    addAvailBtn.disabled = true;
+    addAvailBtn.textContent = '⏳ Asignando...';
+    try {
+      await window.localApi.addAvailability({
+        directory_id: dirId,
+        start_date: start,
+        restart_hour: restart,
+        owner_email: owner
+      });
+      startDateInput.value = '';
+      restartInput.value = '';
+      ownerEmailInput.value = '';
+      directorySelect.value = '';
+      showNotification('✅ Horario de disponibilidad asignado', 'success');
+      await fetchAgents();
+    } catch(err) {
+      showNotification(err?.message || 'Error', 'error');
+    } finally {
+      addAvailBtn.disabled = false;
+      addAvailBtn.textContent = '📅 Asignar Horario';
+    }
+  });
+
+
   // --- History ---
   function showHistory(id) {
     historyContent.innerHTML = '<div class="loading-text"><span class="spinner"></span> Cargando historial...</div>';
@@ -191,7 +272,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     window.localApi.getHistory(id).then(hist => {
       if (!hist || hist.length === 0) {
-        historyContent.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div><div class="empty-state-text">No hay cambios registrados para este agente.</div></div>';
+        historyContent.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📝</div><div class="empty-state-text">No hay cambios registrados para este turno.</div></div>';
         return;
       }
 
@@ -249,7 +330,7 @@ document.addEventListener('DOMContentLoaded', () => {
       btn.disabled = true;
       const nowIso = new Date().toISOString();
       window.localApi?.refreshAgent?.(id, nowIso)
-        .then(() => { fetchAgents(); showNotification('Agente actualizado', 'success', 2000); })
+        .then(() => { fetchAgents(); showNotification('Turno actualizado', 'success', 2000); })
         .catch(err => showNotification('Error: ' + (err?.message || err), 'error'))
         .finally(() => { btn.disabled = false; });
       return;
@@ -271,61 +352,16 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Delete agent
+    // Delete availability
     if (t.classList.contains('delete-btn') || t.closest('.delete-btn')) {
       const btn = t.classList.contains('delete-btn') ? t : t.closest('.delete-btn');
       const id = btn.getAttribute('data-id');
-      if (!confirm('¿Estás seguro de eliminar este agente?\nEsta acción no se puede deshacer.')) return;
+      if (!confirm('¿Estás seguro de eliminar este turno de disponibilidad?\nEl agente seguirá existiendo en el directorio.')) return;
       btn.disabled = true;
       window.localApi?.deleteAgent?.(id)
-        .then(() => { fetchAgents(); showNotification('Agente eliminado', 'info', 2500); })
+        .then(() => { fetchAgents(); showNotification('Turno eliminado', 'info', 2500); })
         .catch(err => showNotification('Error: ' + (err?.message || err), 'error'))
         .finally(() => { btn.disabled = false; });
-    }
-  });
-
-  // --- Add Agent ---
-  addBtn.addEventListener('click', async () => {
-    const email = emailInput.value.trim();
-    const restart = restartInput.value.trim();
-    const name = nameInput?.value.trim() || '';
-    const startDate = startDateInput?.value ? new Date(startDateInput.value).toISOString() : null;
-    const ownerEmail = ownerEmailInput?.value.trim() || '';
-
-    formStatus.textContent = '';
-
-    // Validations
-    if (!email) { showNotification('El correo es requerido.', 'warning'); emailInput.focus(); return; }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(email)) { showNotification('Formato de correo inválido.', 'warning'); emailInput.focus(); return; }
-    if (!restart) { showNotification('La hora de reinicio es requerida.', 'warning'); restartInput.focus(); return; }
-
-    addBtn.disabled = true;
-    addBtn.textContent = '⏳ Registrando...';
-
-    try {
-      await window.localApi.addAgent({
-        email,
-        restart_hour: restart,
-        owner_email: ownerEmail,
-        name,
-        start_date: startDate
-      });
-
-      // Clear form
-      emailInput.value = '';
-      restartInput.value = '';
-      if (nameInput) nameInput.value = '';
-      if (startDateInput) startDateInput.value = '';
-      if (ownerEmailInput) ownerEmailInput.value = '';
-
-      showNotification('✅ Agente registrado correctamente', 'success');
-      await fetchAgents();
-    } catch (err) {
-      showNotification(err?.message || 'Error al registrar', 'error');
-    } finally {
-      addBtn.disabled = false;
-      addBtn.textContent = '➕ Registrar';
     }
   });
 
@@ -356,6 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       await window.localApi.seedIfNeeded();
       await fetchAgents();
+      await loadDirectory();
       showNotification('Datos de ejemplo cargados', 'success');
     } catch (err) {
       showNotification('Error: ' + (err?.message || err), 'error');
@@ -368,7 +405,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const data = await window.localApi.exportData();
       const json = JSON.stringify(data, null, 2);
 
-      // Create downloadable file
       const blob = new Blob([json], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -394,9 +430,10 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const text = await file.text();
         const data = JSON.parse(text);
-        if (!confirm(`¿Importar ${data.agents?.length || 0} agente(s) y ${data.history?.length || 0} registro(s) de historial?\nEsto reemplazará los datos actuales.`)) return;
+        if (!confirm(`¿Importar ${data.directory?.length || 0} agentes y sus disponibilidades?\nEsto reemplazará los datos actuales.`)) return;
         await window.localApi.importData(data);
         await fetchAgents();
+        await loadDirectory();
         showNotification('Datos importados correctamente', 'success');
       } catch (err) {
         showNotification('Error importando: ' + (err?.message || err), 'error');
@@ -405,14 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
     fileInput.click();
   });
 
-  // --- Keyboard: Enter to submit form ---
-  document.getElementById('agent-form')?.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter' && !ev.shiftKey) {
-      ev.preventDefault();
-      addBtn.click();
-    }
-  });
-
   // --- Initial Load ---
+  loadDirectory();
   fetchAgents();
 });

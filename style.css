@@ -727,30 +727,6 @@ a:hover {
   animation: fadeIn 0.3s var(--ease);
 }
 
-/* --- Install Banner --- */
-.install-banner {
-  display: none;
-  position: fixed;
-  bottom: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: linear-gradient(135deg, var(--navy-700), var(--navy-600));
-  color: white;
-  padding: 14px 24px;
-  border-radius: var(--radius-xl);
-  z-index: 9999;
-  cursor: pointer;
-  box-shadow: var(--shadow-xl);
-  font-weight: 600;
-  font-size: 0.9rem;
-  transition: all var(--duration) var(--ease);
-  animation: bounceIn 0.5s var(--ease);
-}
-
-.install-banner:hover {
-  transform: translateX(-50%) translateY(-2px);
-  box-shadow: var(--shadow-xl), 0 0 30px rgba(26, 47, 74, 0.2);
-}
 
 /* --- Data Actions --- */
 .data-actions {

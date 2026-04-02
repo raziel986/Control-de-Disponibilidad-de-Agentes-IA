@@ -1,6 +1,6 @@
 /* ============================================================
    Dexie.js IndexedDB API — Offline Agent Store
-   Version: 2.0 (multi-agent-per-email with auto-increment IDs)
+   Version: 3.0 (Relational: Directory + Availability/Shifts)
    ============================================================ */
 (function () {
   'use strict';
@@ -14,40 +14,59 @@
   const db = new Dexie(DB_NAME);
 
   // --- Schema Versions ---
-  // v1: legacy schema (email as PK) — kept for upgrade path
   db.version(1).stores({
     agents: 'email',
     history: '++id, email'
   });
 
-  // v2: multi-agent-per-email with auto-increment IDs
   db.version(2).stores({
     agents2: '++id, email',
+    history2: '++id, agent_id, email'
+  });
+
+  db.version(3).stores({
+    directory: '++id, email',
+    agents3: '++id, directory_id, status',
+    history3: '++id, agent_id',
+    // Kept to allow migration from fresh installs or past v2
+    agents2: '++id, email',
     history2: '++id, agent_id, email',
-    // Keep legacy tables defined so Dexie can read them during migration
     agents: 'email',
     history: '++id, email'
   }).upgrade(async (trans) => {
-    // Migrate v1 → v2: copy existing agents/history to new stores
-    const oldAgents = await trans.table('agents').toArray();
-    const oldHistory = await trans.table('history').toArray();
+    // Migration v2 -> v3
+    const oldAgents = await trans.table('agents2').toArray();
+    const oldHistory = await trans.table('history2').toArray();
 
-    for (const agent of oldAgents) {
-      const newId = await trans.table('agents2').add({
-        email: agent.email,
-        restart_hour: agent.restart_hour || '08:00',
-        owner_email: agent.owner_email || agent.email,
-        status: agent.status || 'no disponible',
-        last_update: agent.last_update || new Date().toISOString(),
-        name: agent.name || '',
-        start_date: agent.start_date || null
+    // Directory deduplication logic
+    const dirMap = new Map(); // email -> dirId
+
+    for (const a of oldAgents) {
+      if (!a.email) continue;
+      let dirId;
+      if (dirMap.has(a.email)) {
+        dirId = dirMap.get(a.email);
+      } else {
+        dirId = await trans.table('directory').add({
+          name: a.name || '',
+          email: a.email
+        });
+        dirMap.set(a.email, dirId);
+      }
+
+      const newAgentId = await trans.table('agents3').add({
+        directory_id: dirId,
+        restart_hour: a.restart_hour || '08:00',
+        owner_email: a.owner_email || a.email,
+        status: a.status || 'no disponible',
+        last_update: a.last_update || new Date().toISOString(),
+        start_date: a.start_date || null
       });
-      // Re-link history entries to new agent ID
-      const related = oldHistory.filter(h => h.email === agent.email);
-      for (const h of related) {
-        await trans.table('history2').add({
-          agent_id: newId,
-          email: h.email,
+
+      const relatedHistory = oldHistory.filter(h => h.agent_id === a.id);
+      for (const h of relatedHistory) {
+        await trans.table('history3').add({
+          agent_id: newAgentId,
           old_status: h.old_status,
           new_status: h.new_status,
           change_time: h.change_time,
@@ -58,59 +77,97 @@
   });
 
   // --- Helpers ---
-  function store() { return db.agents2; }
-  function histStore() { return db.history2; }
+  function dirStore() { return db.directory; }
+  function store() { return db.agents3; }
+  function histStore() { return db.history3; }
 
-  // --- CRUD Operations ---
+  // --- Directory Operations ---
+
+  async function getDirectoryAgents() {
+    try {
+      return await dirStore().toArray();
+    } catch(err) {
+      console.error(err);
+      return [];
+    }
+  }
+
+  async function addDirectoryAgent(name, email) {
+    if (!email) throw new Error('El correo es requerido.');
+    const existing = await dirStore().where('email').equals(email).first();
+    if (existing) throw new Error('Este correo ya está registrado en el directorio.');
+    
+    const dirId = await dirStore().add({ name: name || '', email });
+    return { id: dirId, name: name || '', email };
+  }
+
+  // --- Availability / Agents Operations ---
 
   async function getAgents() {
     try {
-      return await store().toArray();
+      const availabilities = await store().toArray();
+      const directories = await dirStore().toArray();
+      
+      const dirIndex = {};
+      for (const d of directories) {
+        dirIndex[d.id] = d;
+      }
+
+      // Join
+      return availabilities.map(a => {
+        const dir = dirIndex[a.directory_id] || { name: 'Desconocido', email: 'Desconocido' };
+        return {
+          ...a,
+          name: dir.name,
+          email: dir.email
+        };
+      });
     } catch (err) {
       console.error('[localApi] getAgents failed:', err);
       return [];
     }
   }
 
-  async function addAgent({ email, restart_hour, owner_email, name, start_date }) {
-    if (!email || !restart_hour) {
-      throw new Error('Email y hora de reinicio son requeridos.');
+  async function addAvailability({ directory_id, restart_hour, owner_email, start_date }) {
+    if (!directory_id || !restart_hour) {
+      throw new Error('Agente y hora de reinicio son requeridos.');
     }
+    
+    const numDirId = Number(directory_id);
+    const dirEntry = await dirStore().get(numDirId);
+    if (!dirEntry) throw new Error('Agente no encontrado en el directorio.');
 
     const now = new Date().toISOString();
-    const agent = {
-      email,
+    const availability = {
+      directory_id: numDirId,
       restart_hour,
-      owner_email: (owner_email && owner_email.trim()) || email,
+      owner_email: (owner_email && owner_email.trim()) || '',
       status: 'no disponible',
       last_update: now,
-      name: name || '',
       start_date: start_date || null
     };
 
-    const id = await store().add(agent);
-    agent.id = id;
-
+    const id = await store().add(availability);
+    
     // Record creation in history
     await histStore().add({
       agent_id: id,
-      email,
       old_status: 'nuevo',
       new_status: 'no disponible',
       change_time: now,
-      reason: 'registro inicial'
+      reason: 'asignación de disponibilidad'
     });
 
-    return agent;
+    return { ...availability, id, name: dirEntry.name, email: dirEntry.email };
   }
 
   async function updateAgentManual(id, status) {
     const numId = Number(id);
     const agent = await store().get(numId);
-    if (!agent) throw new Error('Agente no encontrado.');
+    if (!agent) throw new Error('Disponibilidad no encontrada.');
 
     const oldStatus = agent.status;
-    if (oldStatus === status) return agent; // no change needed
+    if (oldStatus === status) return agent; 
 
     agent.status = status;
     agent.last_update = new Date().toISOString();
@@ -118,7 +175,6 @@
 
     await histStore().add({
       agent_id: numId,
-      email: agent.email,
       old_status: oldStatus,
       new_status: status,
       change_time: agent.last_update,
@@ -131,7 +187,7 @@
   async function refreshAgent(id, reference_datetime) {
     const numId = Number(id);
     const agent = await store().get(numId);
-    if (!agent) throw new Error('Agente no encontrado.');
+    if (!agent) throw new Error('Disponibilidad no encontrada.');
 
     const ref = new Date(reference_datetime);
     const [hh, mm] = agent.restart_hour.split(':').map(Number);
@@ -149,7 +205,6 @@
 
       await histStore().add({
         agent_id: numId,
-        email: agent.email,
         old_status: oldStatus,
         new_status: 'disponible',
         change_time: agent.last_update,
@@ -175,50 +230,48 @@
   // --- Data Management ---
 
   async function exportData() {
-    const agents = await store().toArray();
-    const history = await histStore().toArray();
     return {
-      version: 2,
+      version: 3,
       exported_at: new Date().toISOString(),
-      agents,
-      history
+      directory: await dirStore().toArray(),
+      agents: await store().toArray(),
+      history: await histStore().toArray()
     };
   }
 
+  // Simple hard-reset import logic for v3
   async function importData(data) {
-    if (!data || !data.agents) {
-      throw new Error('Datos inválidos para importar.');
-    }
+    if (!data) throw new Error('Datos inválidos.');
+    
+    const directories = data.directory || [];
     const agents = data.agents || [];
     const history = data.history || [];
 
-    await db.transaction('rw', store(), histStore(), async () => {
+    await db.transaction('rw', dirStore(), store(), histStore(), async () => {
+      await dirStore().clear();
       await store().clear();
       await histStore().clear();
+      
+      if (directories.length) await dirStore().bulkAdd(directories);
       if (agents.length) await store().bulkAdd(agents);
       if (history.length) await histStore().bulkAdd(history);
     });
   }
 
   async function seedIfNeeded() {
-    const count = await store().count();
+    const count = await dirStore().count();
     if (count === 0) {
+      const dirId = await dirStore().add({ name: 'Agente Demo', email: 'demo@ejemplo.com' });
       const now = new Date().toISOString();
       await store().add({
-        email: 'demo@ejemplo.com',
+        directory_id: dirId,
         restart_hour: '08:00',
         owner_email: 'demo@ejemplo.com',
         status: 'disponible',
         last_update: now,
-        name: 'Agente Demo',
         start_date: now
       });
     }
-  }
-
-  async function resetDB() {
-    await Dexie.delete(DB_NAME);
-    return true;
   }
 
   async function getStats() {
@@ -231,8 +284,10 @@
 
   // --- Public API ---
   window.localApi = {
+    getDirectoryAgents,
+    addDirectoryAgent,
     getAgents,
-    addAgent,
+    addAvailability,
     updateAgentManual,
     refreshAgent,
     getHistory,
@@ -240,7 +295,6 @@
     exportData,
     importData,
     seedIfNeeded,
-    resetDB,
     getStats
   };
 })();

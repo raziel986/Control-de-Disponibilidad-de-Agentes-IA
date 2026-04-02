@@ -23,8 +23,6 @@
   <!-- Offline Banner -->
   <div id="offline-banner" class="offline-banner" role="status" aria-label="Estado de conexión">⚡ Sin conexión</div>
 
-  <!-- Install Banner -->
-  <div id="install-banner" class="install-banner" role="button" aria-label="Instalar aplicación" tabindex="0">📲 Instalar aplicación</div>
 
   <!-- Header -->
   <header class="app-header" role="banner">
@@ -66,42 +64,71 @@
     </section>
 
     <!-- Registration Form -->
-    <section id="agent-form" class="card" aria-labelledby="form-title">
-      <div class="card-header">
-        <h2 class="card-title" id="form-title">
-          <span class="card-title-icon" aria-hidden="true">➕</span>
-          Registrar Nuevo Agente
-        </h2>
-      </div>
-      <div class="form-grid">
-        <div class="form-group">
-          <label class="form-label" for="agent_name">Nombre</label>
-          <input type="text" id="agent_name" class="form-input" placeholder="Nombre del agente" autocomplete="off" />
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; align-items: start;">
+      <!-- Directory Form -->
+      <section id="directory-form" class="card" aria-labelledby="dir-form-title" style="margin-bottom: 0;">
+        <div class="card-header">
+          <h2 class="card-title" id="dir-form-title">
+            <span class="card-title-icon" aria-hidden="true">👤</span>
+            1. Registrar Agente
+          </h2>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="email">Correo electrónico</label>
-          <input type="email" id="email" class="form-input" placeholder="correo@ejemplo.com" required autocomplete="off" />
+        <div class="form-grid" style="grid-template-columns: 1fr;">
+          <div class="form-group">
+            <label class="form-label" for="agent_name">Nombre completo</label>
+            <input type="text" id="agent_name" class="form-input" placeholder="Nombre (opcional)" autocomplete="off" />
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="email">Correo electrónico</label>
+            <input type="email" id="email" class="form-input" placeholder="correo@ejemplo.com" required autocomplete="off" />
+          </div>
+          <div class="form-group" style="justify-content: flex-end;">
+            <button id="add-directory-agent" class="btn btn-accent" aria-label="Registrar agente en el directorio">
+              ➕ Registrar Agente
+            </button>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="start_date">Fecha de inicio</label>
-          <input type="date" id="start_date" class="form-input" />
+        <div id="dir-form-status" role="status" aria-live="polite" style="margin-top:10px; font-size:0.85rem; color:var(--text-secondary);"></div>
+      </section>
+
+      <!-- Availability Form -->
+      <section id="availability-form" class="card" aria-labelledby="avail-form-title" style="margin-bottom: 0;">
+        <div class="card-header">
+          <h2 class="card-title" id="avail-form-title">
+            <span class="card-title-icon" aria-hidden="true">⏱️</span>
+            2. Asignar Disponibilidad
+          </h2>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="restart_hour">Hora de reinicio</label>
-          <input type="time" id="restart_hour" class="form-input" required />
+        <div class="form-grid" style="grid-template-columns: 1fr;">
+          <div class="form-group">
+            <label class="form-label" for="directory_id">Agente registrado</label>
+            <select id="directory_id" class="form-input" required>
+              <option value="">-- Seleccionar agente --</option>
+            </select>
+          </div>
+          <div class="form-group" style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div>
+              <label class="form-label" for="start_date">Fecha de inicio</label>
+              <input type="date" id="start_date" class="form-input" />
+            </div>
+            <div>
+              <label class="form-label" for="restart_hour">Hora reinicio</label>
+              <input type="time" id="restart_hour" class="form-input" required />
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="owner_email">Propietario (opcional)</label>
+            <input type="email" id="owner_email" class="form-input" placeholder="correo alternativo" autocomplete="off" />
+          </div>
+          <div class="form-group" style="justify-content: flex-end;">
+            <button id="add-availability" class="btn btn-primary" aria-label="Asignar horario a agente">
+              📅 Asignar Horario
+            </button>
+          </div>
         </div>
-        <div class="form-group">
-          <label class="form-label" for="owner_email">Propietario (opcional)</label>
-          <input type="email" id="owner_email" class="form-input" placeholder="propietario@ejemplo.com" autocomplete="off" />
-        </div>
-        <div class="form-group" style="justify-content: flex-end;">
-          <button id="add-agent" class="btn btn-accent" aria-label="Registrar nuevo agente">
-            ➕ Registrar
-          </button>
-        </div>
-      </div>
-      <div id="form-status" role="status" aria-live="polite" style="margin-top:10px; font-size:0.85rem; color:var(--text-secondary);"></div>
-    </section>
+        <div id="avail-form-status" role="status" aria-live="polite" style="margin-top:10px; font-size:0.85rem; color:var(--text-secondary);"></div>
+      </section>
+    </div>
 
     <!-- Agents Table -->
     <section id="agents-panel" class="card" aria-labelledby="agents-title">
@@ -175,31 +202,6 @@
       });
     }
 
-    // --- PWA Install Prompt ---
-    let deferredInstallPrompt = null;
-
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredInstallPrompt = e;
-      const banner = document.getElementById('install-banner');
-      if (banner) banner.style.display = 'block';
-    });
-
-    window.addEventListener('appinstalled', () => {
-      const banner = document.getElementById('install-banner');
-      if (banner) banner.style.display = 'none';
-      deferredInstallPrompt = null;
-    });
-
-    document.getElementById('install-banner')?.addEventListener('click', () => {
-      if (deferredInstallPrompt) {
-        deferredInstallPrompt.prompt();
-        deferredInstallPrompt.userChoice.then(() => {
-          deferredInstallPrompt = null;
-          document.getElementById('install-banner').style.display = 'none';
-        });
-      }
-    });
 
     // --- Online/Offline Status ---
     function updateOnlineStatus() {
