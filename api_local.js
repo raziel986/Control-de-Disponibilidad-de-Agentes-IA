@@ -77,12 +77,6 @@
       throw new Error('Email y hora de reinicio son requeridos.');
     }
 
-    // Check for duplicate email
-    const existing = await store().where('email').equals(email).first();
-    if (existing) {
-      throw new Error(`Ya existe un agente con el correo "${email}".`);
-    }
-
     const now = new Date().toISOString();
     const agent = {
       email,
