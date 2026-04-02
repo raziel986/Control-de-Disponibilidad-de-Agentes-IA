@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Disponibilidad de Agentes</title>
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#2c3e50" />
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://unpkg.com/dexie@3/dist/dexie.min.js"></script>
+  <script src="/api_local.js" defer></script>
+  <script defer src="/script.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    header { padding: 16px; background: #2c3e50; color: white; display: flex; justify-content: space-between; align-items: center; }
+    main { padding: 16px; }
+    .container { max-width: 1000px; margin: 0 auto; }
+    table { width: 100%; border-collapse: collapse; margin-top: 12px; }
+    th, td { padding: 8px 12px; border-bottom: 1px solid #ddd; text-align: left; }
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.9em; }
+    .badge.disponible { background: #2ecc71; color: white; }
+    .badge.no-disponible { background: #e74c3c; color: white; }
+    .card { border: 1px solid #ddd; padding: 12px; border-radius: 6px; margin-top: 12px; }
+    .form-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    input, select { padding: 8px; border-radius: 4px; border: 1px solid #ccc; min-width: 180px; }
+    button { padding: 8px 12px; border-radius: 4px; border: none; background: #3498db; color: white; cursor: pointer; }
+    button.secondary { background: #7f8c8d; }
+  </style>
+</head>
+<body>
+  <section class="card" id="mobile-actions" style="margin:8px 0;padding:12px;border:1px solid #ddd;border-radius:6px;display:none;">
+    <h3 style="margin:0 0 8px 0;font-size:16px;">Acciones offline</h3>
+    <button id="seed-btn" style="margin-right:8px;">Sembrar datos</button>
+    <button id="export-btn" style="margin-right:8px;">Exportar Dexie</button>
+    <button id="import-btn">Importar Dexie</button>
+  </section>
+  <div id="offline-banner" style="position:fixed;bottom:8px;right:8px;background:#e74c3c;color:white;padding:6px 10px;border-radius:4px;display:none;z-index:9999;"> offline </div>
+  <header>
+    <div>Disponibilidad de Agentes</div>
+    <div id="autostart-toggle" title="Opción de inicio automático (Windows)" style="cursor:default; font-size:0.9em; opacity:.8"></div>
+  </header>
+  <main>
+    <div class="container">
+      <section id="agent-form" class="card">
+        <h3>Registrar nuevo agente</h3>
+        <div class="form-row">
+          <input type="email" id="email" placeholder="Correo (único)" />
+          <input type="text" id="restart_hour" placeholder="Hora de reinicio HH:MM" />
+          <button id="add-agent">Registrar</button>
+        </div>
+        <div id="form-status" style="margin-top:8px; color:#555"></div>
+      </section>
+
+      <section class="card" id="agents-panel">
+        <h3>Agentes</h3>
+        <table id="agents-table">
+          <thead>
+            <tr>
+              <th>Correo</th>
+              <th>Reinicio</th>
+              <th>Estado</th>
+              <th>Última actualización</th>
+              <th>Acciones</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section class="card" id="history-section" style="display:none;">
+        <h3>Historial</h3>
+        <div id="history-content"></div>
+      </section>
+    </div>
+  </main>
+  <script>
+    // Register Service Worker for PWA functionality
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').then(reg => {
+          console.log('Service Worker registered:', reg);
+        }).catch(err => {
+          console.log('Service Worker registration failed:', err);
+        });
+      });
+    }
+    // Simple online/offline banner
+    function updateOnlineStatus() {
+      const banner = document.getElementById('offline-banner');
+      if (navigator.onLine) {
+        banner.style.display = 'none';
+      } else {
+        banner.style.display = 'block';
+        banner.textContent = 'Offline - cambia a modo offline';
+      }
+    }
+    window.addEventListener('online', updateOnlineStatus);
+    window.addEventListener('offline', updateOnlineStatus);
+    updateOnlineStatus();
+    // Show mobile actions container on small viewports
+    function ensureMobileActionsVisible(){
+      const el = document.getElementById('mobile-actions');
+      if (window.innerWidth <= 680) el.style.display = 'block';
+      else el.style.display = 'none';
+    }
+    window.addEventListener('resize', ensureMobileActionsVisible);
+    ensureMobileActionsVisible();
+  </script>
+  </body>
+</html>

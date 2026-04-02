@@ -1,0 +1,12 @@
+/* Lightweight styles shipped inline in index.html for simplicity.
+   This file can be extended for richer UX while keeping core logic minimal. */
+
+/* Responsive adjustments for mobile */
+@media (max-width: 600px) {
+  body { font-size: 14px; }
+  .container { padding: 0 12px; }
+  input, select, button { width: 100%; }
+  #agents-table { width: 100%; overflow-x: auto; display: block; }
+  th, td { padding: 8px; }
+  header { padding: 12px; flex-wrap: wrap; }
+}
