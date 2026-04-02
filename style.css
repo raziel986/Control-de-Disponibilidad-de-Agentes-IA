@@ -828,11 +828,6 @@ a:hover {
     font-size: 1.4rem;
   }
 
-  /* Table: hide less important columns */
-  .data-table thead th:nth-child(3),
-  .data-table tbody td:nth-child(3) {
-    display: none;
-  }
 }
 
 /* --- Tablet Portrait / Large Phone (≤768px) --- */
