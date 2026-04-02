@@ -190,55 +190,78 @@ document.addEventListener('DOMContentLoaded', () => {
 
     cachedAgents = agents;
 
+    // Group by email
+    const groupedAgents = {};
     agents.forEach(a => {
-      const tr = document.createElement('tr');
-      const isAvailable = a.status === 'disponible';
-      const statusLabel = isAvailable ? 'Disponible' : 'No disponible';
-      const badgeClass = isAvailable ? 'badge-disponible' : 'badge-no-disponible';
+      const e = a.email || 'Desconocido';
+      if (!groupedAgents[e]) groupedAgents[e] = [];
+      groupedAgents[e].push(a);
+    });
 
-      let lastUpdate = '—';
-      if (a.last_update) {
-        try {
-          lastUpdate = new Date(a.last_update).toLocaleString('es-ES', {
-            day: '2-digit', month: '2-digit', year: 'numeric',
-            hour: '2-digit', minute: '2-digit'
-          });
-        } catch { lastUpdate = a.last_update; }
-      }
+    const sortedEmails = Object.keys(groupedAgents).sort();
 
-      let startDate = '—';
-      if (a.start_date) {
-        try {
-          startDate = new Date(a.start_date).toLocaleDateString('es-ES');
-        } catch { startDate = ''; }
-      }
+    sortedEmails.forEach(email => {
+      // 1. Render Group Header
+      const groupTr = document.createElement('tr');
+      groupTr.style.background = 'var(--surface)';
+      groupTr.style.borderTop = '2px solid var(--border)';
+      
+      groupTr.innerHTML = `<td colspan="7" style="padding: 12px 16px; font-weight: 700; color: var(--accent); text-align: left;">
+        👤 ${email}
+      </td>`;
+      tbody.appendChild(groupTr);
 
-      tr.innerHTML = `
-        <td data-label="Correo (Usuario)">
-          <a href="#" class="agent-email history-link" data-id="${a.id}" aria-label="Ver historial de modelo">${a.email}</a>
-        </td>
-        <td data-label="Modelo de IA"><strong>${a.model_name || '—'}</strong></td>
-        <td data-label="Fecha Inicio">${startDate}</td>
-        <td data-label="Reinicio">${a.restart_hour}</td>
-        <td data-label="Estado">
-          <span class="badge ${badgeClass}" role="status">
-            <span class="badge-dot"></span>
-            ${statusLabel}
-          </span>
-        </td>
-        <td data-label="Última Actualización">${lastUpdate}</td>
-        <td data-label="Acciones">
-          <div class="cell-actions">
-            <button data-id="${a.id}" class="btn btn-ghost btn-sm refresh-btn" aria-label="Actualizar modelo" title="Comprobar reinicio">🔄</button>
-            <select data-id="${a.id}" class="force-select" aria-label="Cambiar estado manual">
-              <option value="disponible" ${isAvailable ? 'selected' : ''}>Disponible</option>
-              <option value="no disponible" ${!isAvailable ? 'selected' : ''}>No disponible</option>
-            </select>
-            <button data-id="${a.id}" class="btn btn-primary btn-sm force-btn" title="Forzar estado">⚡</button>
-            <button data-id="${a.id}" class="btn btn-danger btn-sm delete-btn" title="Remover de este usuario">🗑️</button>
-          </div>
-        </td>`;
-      tbody.appendChild(tr);
+      // 2. Render Models for this Email
+      groupedAgents[email].forEach(a => {
+        const tr = document.createElement('tr');
+        const isAvailable = a.status === 'disponible';
+        const statusLabel = isAvailable ? 'Disponible' : 'No disponible';
+        const badgeClass = isAvailable ? 'badge-disponible' : 'badge-no-disponible';
+
+        let lastUpdate = '—';
+        if (a.last_update) {
+          try {
+            lastUpdate = new Date(a.last_update).toLocaleString('es-ES', {
+              day: '2-digit', month: '2-digit', year: 'numeric',
+              hour: '2-digit', minute: '2-digit'
+            });
+          } catch { lastUpdate = a.last_update; }
+        }
+
+        let startDate = '—';
+        if (a.start_date) {
+          try {
+            startDate = new Date(a.start_date).toLocaleDateString('es-ES');
+          } catch { startDate = ''; }
+        }
+
+        tr.innerHTML = `
+          <td data-label="Correo (Usuario)" style="padding-left: 2rem;">
+            <a href="#" class="agent-email history-link" data-id="${a.id}" aria-label="Ver historial de modelo" style="font-size:0.85rem; color:var(--text-muted);">Ver historial</a>
+          </td>
+          <td data-label="Modelo de IA"><strong>${a.model_name || '—'}</strong></td>
+          <td data-label="Fecha Inicio">${startDate}</td>
+          <td data-label="Reinicio">${a.restart_hour}</td>
+          <td data-label="Estado">
+            <span class="badge ${badgeClass}" role="status">
+              <span class="badge-dot"></span>
+              ${statusLabel}
+            </span>
+          </td>
+          <td data-label="Última Actualización">${lastUpdate}</td>
+          <td data-label="Acciones">
+            <div class="cell-actions">
+              <button data-id="${a.id}" class="btn btn-ghost btn-sm refresh-btn" aria-label="Actualizar modelo" title="Comprobar reinicio">🔄</button>
+              <select data-id="${a.id}" class="force-select" aria-label="Cambiar estado manual">
+                <option value="disponible" ${isAvailable ? 'selected' : ''}>Disponible</option>
+                <option value="no disponible" ${!isAvailable ? 'selected' : ''}>No disponible</option>
+              </select>
+              <button data-id="${a.id}" class="btn btn-primary btn-sm force-btn" title="Forzar estado">⚡</button>
+              <button data-id="${a.id}" class="btn btn-danger btn-sm delete-btn" title="Remover de este usuario">🗑️</button>
+            </div>
+          </td>`;
+        tbody.appendChild(tr);
+      });
     });
   }
 
