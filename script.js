@@ -76,6 +76,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }, stepTime);
   }
 
+  // --- Form Toggle ---
+  const toggleFormBtn   = document.getElementById('toggle-form-btn');
+  const addFormSection  = document.getElementById('ai-assignment-form');
+  
+  toggleFormBtn?.addEventListener('click', () => {
+    if (addFormSection.style.display === 'none') {
+      addFormSection.style.display = 'block';
+      toggleFormBtn.textContent = '❌ Ocultar Asignación';
+      toggleFormBtn.classList.replace('btn-primary', 'btn-danger');
+    } else {
+      addFormSection.style.display = 'none';
+      toggleFormBtn.textContent = '➕ Añadir Asignación de IA';
+      toggleFormBtn.classList.replace('btn-danger', 'btn-primary');
+    }
+  });
+
   // --- UI Interactivity ---
   modelCheckboxes.forEach(cb => {
     cb.addEventListener('change', (e) => {
@@ -150,6 +166,12 @@ document.addEventListener('DOMContentLoaded', () => {
           cb.checked = false;
           cb.dispatchEvent(new Event('change')); // Trigger hide
         });
+        
+        // Auto hide form to demonstrate clean UI
+        if (addFormSection && addFormSection.style.display !== 'none') {
+            toggleFormBtn.click();
+        }
+
         await fetchAgents();
       }
     } catch (err) {
@@ -161,7 +183,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
 
-  // --- Render Agents Table ---
+  // --- Render Agents Table (Accordion Style) ---
   function renderAgents(agents, loading = false) {
     tbody.innerHTML = '';
 
@@ -200,20 +222,64 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const sortedEmails = Object.keys(groupedAgents).sort();
 
-    sortedEmails.forEach(email => {
-      // 1. Render Group Header
+    sortedEmails.forEach((email, index) => {
+      const groupData = groupedAgents[email];
+      const hasAvailable = groupData.some(a => a.status === 'disponible');
+
+      let closestSpan = '';
+      if (hasAvailable) {
+         closestSpan = '<div style="font-size:0.8rem; font-weight:normal; color:var(--success); margin-top:4px;">Disponibilidad inmediata 🟢</div>';
+      } else {
+         let closestMs = Infinity;
+         let closestStr = '';
+         const now = new Date();
+         groupData.forEach(a => {
+             if (!a.restart_hour) return;
+             const [hh, mm] = a.restart_hour.split(':').map(Number);
+             let target = new Date();
+             target.setHours(hh, mm, 0, 0);
+             if (target <= now) {
+                target.setDate(target.getDate() + 1);
+             }
+             const diff = target - now;
+             if (diff < closestMs) {
+                closestMs = diff;
+                closestStr = a.restart_hour;
+             }
+         });
+         if (closestStr) {
+             closestSpan = `<div style="font-size:0.8rem; font-weight:normal; color:var(--text-muted); margin-top:4px; margin-left: 20px;">Próxima disponibilidad de un Agente IA: <strong>${closestStr}</strong></div>`;
+         }
+      }
+
+      // 1. Render Group Header (Accordion Toggle)
       const groupTr = document.createElement('tr');
       groupTr.style.background = 'var(--surface)';
       groupTr.style.borderTop = '2px solid var(--border)';
+      groupTr.style.cursor = 'pointer';
+      groupTr.classList.add('group-header');
+      groupTr.dataset.targetId = `group-${index}`;
       
-      groupTr.innerHTML = `<td colspan="7" style="padding: 12px 16px; font-weight: 700; color: var(--accent); text-align: left;">
-        👤 ${email}
+      groupTr.innerHTML = `<td colspan="7" style="padding: 12px 16px; color: var(--accent); text-align: left;">
+        <div style="display:flex; align-items:flex-start;">
+          <span class="accordion-icon" style="display:inline-block; transition:transform 0.2s; margin-top:2px; margin-right:8px; font-size: 0.8rem; font-weight: 700;">▶</span>
+          <div style="display:flex; flex-direction:column;">
+            <div style="font-weight: 700;">
+              👤 ${email}
+              ${hasAvailable ? '<span title="Usuario con Agentes Activos" style="margin-left:8px; font-size:0.9rem;">🟢</span>' : ''}
+            </div>
+            ${closestSpan}
+          </div>
+        </div>
       </td>`;
       tbody.appendChild(groupTr);
 
-      // 2. Render Models for this Email
-      groupedAgents[email].forEach(a => {
+      // 2. Render Models for this Email (Collapsed by default)
+      groupData.forEach(a => {
         const tr = document.createElement('tr');
+        tr.classList.add(`child-of-group-${index}`);
+        tr.style.display = 'none';
+
         const isAvailable = a.status === 'disponible';
         const statusLabel = isAvailable ? 'Disponible' : 'No disponible';
         const badgeClass = isAvailable ? 'badge-disponible' : 'badge-no-disponible';
@@ -229,6 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         let startDate = '—';
+        const rawDateStr = a.start_date ? a.start_date.split('T')[0] : '';
         if (a.start_date) {
           try {
             startDate = new Date(a.start_date).toLocaleDateString('es-ES');
@@ -240,8 +307,8 @@ document.addEventListener('DOMContentLoaded', () => {
             <a href="#" class="agent-email history-link" data-id="${a.id}" aria-label="Ver historial de modelo" style="font-size:0.85rem; color:var(--text-muted);">Ver historial</a>
           </td>
           <td data-label="Modelo de IA"><strong>${a.model_name || '—'}</strong></td>
-          <td data-label="Fecha Inicio">${startDate}</td>
-          <td data-label="Reinicio">${a.restart_hour}</td>
+          <td data-label="Fecha Inicio" class="td-date" data-raw-date="${rawDateStr}">${startDate}</td>
+          <td data-label="Reinicio" class="td-time">${a.restart_hour}</td>
           <td data-label="Estado">
             <span class="badge ${badgeClass}" role="status">
               <span class="badge-dot"></span>
@@ -251,13 +318,14 @@ document.addEventListener('DOMContentLoaded', () => {
           <td data-label="Última Actualización">${lastUpdate}</td>
           <td data-label="Acciones">
             <div class="cell-actions">
-              <button data-id="${a.id}" class="btn btn-ghost btn-sm refresh-btn" aria-label="Actualizar modelo" title="Comprobar reinicio">🔄</button>
+              <button data-id="${a.id}" class="btn btn-ghost btn-sm edit-btn" title="Editar Tiempos (En Línea)">✏️</button>
+              <button data-id="${a.id}" class="btn btn-ghost btn-sm refresh-btn" aria-label="Actualizar modelo" title="Comprobar reinicio automático">🔄</button>
               <select data-id="${a.id}" class="force-select" aria-label="Cambiar estado manual">
                 <option value="disponible" ${isAvailable ? 'selected' : ''}>Disponible</option>
                 <option value="no disponible" ${!isAvailable ? 'selected' : ''}>No disponible</option>
               </select>
-              <button data-id="${a.id}" class="btn btn-primary btn-sm force-btn" title="Forzar estado">⚡</button>
-              <button data-id="${a.id}" class="btn btn-danger btn-sm delete-btn" title="Remover de este usuario">🗑️</button>
+              <button data-id="${a.id}" class="btn btn-primary btn-sm force-btn" title="Forzar cambio de estado">⚡</button>
+              <button data-id="${a.id}" class="btn btn-danger btn-sm delete-btn" title="Remover IA de este usuario">🗑️</button>
             </div>
           </td>`;
         tbody.appendChild(tr);
@@ -266,7 +334,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // --- Fetch ---
-  async function fetchAgents() {
+  async function fetchAgents(preserveExpanded = false) {
+    // Note: To preserve toggled state, we'd need to track expanded groups. 
+    // Right now, it's safer for performance to re-render clean, but could be enhanced later.
     renderAgents([], true);
     if (!window.localApi?.getAgents) {
       renderAgents([], false);
@@ -335,9 +405,26 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   // --- Table Event Delegation ---
-  document.querySelector('#agents-table').addEventListener('click', (ev) => {
+  document.querySelector('#agents-table').addEventListener('click', async (ev) => {
     const t = ev.target;
 
+    // 1. Accordion Toggle
+    const groupHeader = t.closest('.group-header');
+    if (groupHeader) {
+      const targetId = groupHeader.dataset.targetId;
+      const children = tbody.querySelectorAll(`.child-of-${targetId}`);
+      const icon = groupHeader.querySelector('.accordion-icon');
+      
+      const isExpanded = icon.style.transform === 'rotate(90deg)';
+      icon.style.transform = isExpanded ? 'rotate(0deg)' : 'rotate(90deg)';
+      
+      children.forEach(child => {
+        child.style.display = isExpanded ? 'none' : 'table-row';
+      });
+      return;
+    }
+
+    // 2. History link
     if (t.classList.contains('history-link')) {
       ev.preventDefault();
       const id = t.getAttribute('data-id');
@@ -345,18 +432,64 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
+    // 3. Inline Edit feature
+    if (t.classList.contains('edit-btn') || t.closest('.edit-btn')) {
+      const btn = t.classList.contains('edit-btn') ? t : t.closest('.edit-btn');
+      const tr = btn.closest('tr');
+      const id = btn.getAttribute('data-id');
+      
+      if (tr.classList.contains('editing')) {
+        // Save Mode
+        const dateInput = tr.querySelector('.inline-date');
+        const timeInput = tr.querySelector('.inline-time');
+        btn.disabled = true;
+        btn.innerHTML = '⏳';
+        
+        try {
+            const sDate = dateInput.value ? new Date(dateInput.value).toISOString() : null;
+            await window.localApi.updateModelSettings(id, timeInput.value, sDate);
+            showNotification('Ajustes en línea guardados exitosamente', 'success', 2500);
+            
+            // To be technically robust without losing accordion state, we could just manually rebuild the row cells,
+            // but a clean fetchAgents is safer for data integrity.
+            await fetchAgents(); 
+        } catch (err) {
+            showNotification(err.message || 'Error guardando', 'error');
+            btn.disabled = false;
+            btn.innerHTML = '✔️';
+        }
+        return;
+      }
+      
+      // Enter edit mode
+      tr.classList.add('editing');
+      btn.innerHTML = '✔️';
+      btn.title = 'Guardar';
+      
+      const tdDate = tr.querySelector('.td-date');
+      const tdTime = tr.querySelector('.td-time');
+      const rawD = tdDate.dataset.rawDate || '';
+      const rawT = tdTime.textContent.trim();
+      
+      tdDate.innerHTML = `<input type="date" class="form-input inline-date" value="${rawD}" style="padding:4px; font-size:0.8rem; width:120px; border-radius: var(--radius-sm); border: 1px solid var(--border);"/>`;
+      tdTime.innerHTML = `<input type="time" class="form-input inline-time" value="${rawT}" style="padding:4px; font-size:0.8rem; width:100px; border-radius: var(--radius-sm); border: 1px solid var(--border);"/>`;
+      return;
+    }
+
+    // 4. Manual Refresh
     if (t.classList.contains('refresh-btn') || t.closest('.refresh-btn')) {
       const btn = t.classList.contains('refresh-btn') ? t : t.closest('.refresh-btn');
       const id = btn.getAttribute('data-id');
       btn.disabled = true;
       const nowIso = new Date().toISOString();
       window.localApi?.refreshAgent?.(id, nowIso)
-        .then(() => { fetchAgents(); showNotification('Chequeo actualizado', 'success', 2000); })
+        .then(() => { fetchAgents(); showNotification('Verificación manual completada', 'success', 2000); })
         .catch(err => showNotification('Error: ' + (err?.message || err), 'error'))
         .finally(() => { btn.disabled = false; });
       return;
     }
 
+    // 5. Force Dropdown Status Status
     if (t.classList.contains('force-btn') || t.closest('.force-btn')) {
       const btn = t.classList.contains('force-btn') ? t : t.closest('.force-btn');
       const id = btn.getAttribute('data-id');
@@ -366,25 +499,26 @@ document.addEventListener('DOMContentLoaded', () => {
       const newStatus = select.value;
       btn.disabled = true;
       window.localApi?.updateAgentManual?.(id, newStatus)
-        .then(() => { fetchAgents(); showNotification(`Cambiado a "${newStatus}"`, 'success', 2500); })
+        .then(() => { fetchAgents(); showNotification(`Cambiado forzosamente a "${newStatus}"`, 'success', 2500); })
         .catch(err => showNotification('Error: ' + (err?.message || err), 'error'))
         .finally(() => { btn.disabled = false; });
       return;
     }
 
+    // 6. Delete
     if (t.classList.contains('delete-btn') || t.closest('.delete-btn')) {
       const btn = t.classList.contains('delete-btn') ? t : t.closest('.delete-btn');
       const id = btn.getAttribute('data-id');
-      if (!confirm('¿Eliminar esta instancia de Inteligencia Artificial para este usuario?\nSe borrará su estado y hora.')) return;
+      if (!confirm('¿Desasignar y eliminar esta instancia de Inteligencia Artificial para este usuario?\nPerderá todo su historial asociado.')) return;
       btn.disabled = true;
       window.localApi?.deleteAgent?.(id)
-        .then(() => { fetchAgents(); showNotification('Modelo desasignado', 'info', 2500); })
+        .then(() => { fetchAgents(); showNotification('Modelo IA Removido', 'info', 2500); })
         .catch(err => showNotification('Error: ' + (err?.message || err), 'error'))
         .finally(() => { btn.disabled = false; });
     }
   });
 
-  // --- Actions ---
+  // --- Global Actions ---
   refreshAllBtn?.addEventListener('click', async () => {
     refreshAllBtn.disabled = true;
     refreshAllBtn.textContent = '⏳ Evaluando...';
@@ -393,11 +527,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       for (const agent of cachedAgents) {
+        // Evaluate restart logic globally
         const result = await window.localApi.refreshAgent(agent.id, nowIso);
         if (result.status === 'disponible' && agent.status !== 'disponible') updated++;
       }
       await fetchAgents();
-      showNotification(`Evaluación terminada. ${updated} modelos habilitados por hora.`, 'success');
+      showNotification(`Evaluación terminada. ${updated} modelos fueron restaurados por su reinicio automático.`, 'success');
     } catch (err) {
       showNotification('Error: ' + (err?.message || err), 'error');
     } finally {

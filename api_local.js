@@ -162,6 +162,28 @@
     return { ...assignment, id, email: userEntry.email };
   }
 
+  async function updateModelSettings(id, restart_hour, start_date) {
+    const numId = Number(id);
+    const agent = await modelsStore().get(numId);
+    if (!agent) throw new Error('Instancia de modelo no encontrada.');
+
+    agent.restart_hour = restart_hour;
+    agent.start_date = start_date || null;
+    agent.last_update = new Date().toISOString();
+    
+    await modelsStore().put(agent);
+
+    await histStore().add({
+      model_id: numId,
+      old_status: agent.status,
+      new_status: agent.status,
+      change_time: agent.last_update,
+      reason: 'actualización de horas/fechas'
+    });
+
+    return agent;
+  }
+
   async function updateAgentManual(id, status) {
     const numId = Number(id);
     const agent = await modelsStore().get(numId);
@@ -296,6 +318,7 @@
     addAiAssignment,
     getAgents,
     updateAgentManual,
+    updateModelSettings,
     refreshAgent,
     getHistory,
     deleteAgent,
