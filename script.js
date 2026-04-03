@@ -294,10 +294,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         let startDate = '—';
         const rawDateStr = a.start_date ? a.start_date.split('T')[0] : '';
-        if (a.start_date) {
-          try {
-            startDate = new Date(a.start_date).toLocaleDateString('es-ES');
-          } catch { startDate = ''; }
+        if (rawDateStr) {
+          const [y, m, d] = rawDateStr.split('-');
+          startDate = `${d}/${m}/${y}`;
         }
 
         tr.innerHTML = `
