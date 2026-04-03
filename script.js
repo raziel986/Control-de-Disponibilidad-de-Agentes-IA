@@ -13,7 +13,6 @@ document.addEventListener('DOMContentLoaded', () => {
   const modelCheckboxes = document.querySelectorAll('.model-cb');
 
   const tbody           = document.querySelector('#agents-table tbody');
-  const closeHistoryBtn = null;
   const refreshAllBtn   = document.getElementById('refresh-all-btn');
   const notifContainer  = document.getElementById('notification-container');
 
@@ -188,7 +187,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loading) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="7" class="loading-text">
+          <td colspan="6" class="loading-text">
             <span class="spinner"></span> Cargando instancias de IA...
           </td>
         </tr>`;
@@ -198,7 +197,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!agents || agents.length === 0) {
       tbody.innerHTML = `
         <tr>
-          <td colspan="7">
+          <td colspan="6">
             <div class="empty-state">
               <div class="empty-state-icon">🤖</div>
               <div class="empty-state-text">No hay modelos IA asignados.<br>Usa el formulario superior para asignar accesos a un usuario.</div>
@@ -258,7 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
       groupTr.classList.add('group-header');
       groupTr.dataset.targetId = `group-${index}`;
       
-      groupTr.innerHTML = `<td colspan="7" style="padding: 12px 16px; color: var(--accent); text-align: left;">
+      groupTr.innerHTML = `<td colspan="6" style="padding: 12px 16px; color: var(--accent); text-align: left;">
         <div style="display:flex; align-items:flex-start;">
           <span class="accordion-icon" style="display:inline-block; transition:transform 0.2s; margin-top:2px; margin-right:8px; font-size: 0.8rem; font-weight: 700;">▶</span>
           <div style="display:flex; flex-direction:column;">
@@ -312,9 +311,6 @@ document.addEventListener('DOMContentLoaded', () => {
             </span>
           </td>
           <td data-label="Última Actualización">${lastUpdate}</td>
-          <td data-label="Historial">
-            <a href="#" class="agent-email history-link" data-id="${a.id}" aria-label="Ver historial de modelo" style="font-size:0.85rem; color:var(--text-muted);">📜 Ver historial</a>
-          </td>
           <td data-label="Acciones">
             <div class="cell-actions">
               <button data-id="${a.id}" class="btn btn-ghost btn-sm edit-btn" title="Editar Tiempos (En Línea)">✏️</button>
@@ -374,83 +370,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // 2. History link (Inline Toggle)
-    if (t.classList.contains('history-link')) {
-      ev.preventDefault();
-      const id = t.getAttribute('data-id');
-      const parentRow = t.closest('tr');
-      
-      // Auto-collapse logic: close any existing inline history row
-      const existingHistoryRows = tbody.querySelectorAll('.inline-history-row');
-      let wasAlreadyOpenHere = false;
-      
-      existingHistoryRows.forEach(row => {
-          if (row.previousElementSibling === parentRow) {
-             wasAlreadyOpenHere = true;
-          }
-          row.remove();
-      });
-
-      if (wasAlreadyOpenHere) {
-         // If it was already open under this row, just close it.
-         return;
-      }
-
-      // Create new dropdown row
-      const historyTr = document.createElement('tr');
-      historyTr.className = 'inline-history-row';
-      historyTr.innerHTML = `
-        <td colspan="7" style="padding: 0; border: none;">
-          <div class="history-panel-inline" style="padding: 16px; background: var(--navy-50); box-shadow: inset 0 3px 6px rgba(0,0,0,0.05); overflow:hidden;">
-             <div class="loading-text"><span class="spinner"></span> Cargando historial...</div>
-          </div>
-        </td>
-      `;
-      // Insert right below the parent row
-      parentRow.after(historyTr);
-      
-      const container = historyTr.querySelector('.history-panel-inline');
-
-      if (!window.localApi?.getHistory) {
-         container.innerHTML = '<div class="empty-state-text">Historial no disponible.</div>';
-         return;
-      }
-
-      window.localApi.getHistory(id).then(hist => {
-        if (!hist || hist.length === 0) {
-          container.innerHTML = '<div class="empty-state-text" style="text-align:center; padding:12px;">No hay cambios registrados.</div>';
-          return;
-        }
-
-        container.innerHTML = hist.map(h => {
-          let changeTime = h.change_time;
-          try {
-            changeTime = new Date(h.change_time).toLocaleString('es-ES', {
-              day: '2-digit', month: '2-digit', year: 'numeric',
-              hour: '2-digit', minute: '2-digit', second: '2-digit'
-            });
-          } catch {}
-
-          const directionClass = h.new_status === 'disponible' ? 'to-disponible' : 'to-no-disponible';
-
-          return `
-            <div class="history-item ${directionClass}" style="margin-bottom:8px; background:var(--surface);">
-              <div class="history-time">📅 ${changeTime}</div>
-              <div class="history-change">
-                <span>${h.old_status}</span>
-                <span class="arrow">→</span>
-                <span><strong>${h.new_status}</strong></span>
-              </div>
-              <div class="history-reason">Razón: ${(h.reason || 'No especificada').charAt(0).toUpperCase() + (h.reason || 'No especificada').slice(1)}</div>
-            </div>`;
-        }).join('');
-      }).catch(err => {
-        container.innerHTML = `<div class="empty-state-text" style="color:var(--danger)">Error: ${err.message || err}</div>`;
-      });
-      return;
-    }
-
-    // 3. Inline Edit feature
+    // 2. Inline Edit feature
     if (t.classList.contains('edit-btn') || t.closest('.edit-btn')) {
       const btn = t.classList.contains('edit-btn') ? t : t.closest('.edit-btn');
       const tr = btn.closest('tr');
