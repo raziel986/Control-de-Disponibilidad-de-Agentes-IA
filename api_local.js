@@ -212,18 +212,29 @@
     const agent = await modelsStore().get(numId);
     if (!agent) throw new Error('Instancia de modelo no encontrada.');
 
-    const ref = new Date(reference_datetime);
-    const [hh, mm] = agent.restart_hour.split(':').map(Number);
-    const restartDate = new Date(ref);
-    restartDate.setHours(hh, mm, 0, 0);
+    const now = new Date(reference_datetime);
+    const nowDateStr = now.toISOString().split('T')[0]; // "2026-04-02"
 
-    const lastUp = new Date(agent.last_update);
-    const shouldRefresh = ref.toDateString() > lastUp.toDateString() && ref >= restartDate;
+    // Get start date (raw, no timezone shift)
+    const startDateStr = agent.start_date ? agent.start_date.split('T')[0] : nowDateStr;
 
-    if (shouldRefresh && agent.status !== 'disponible') {
+    let shouldBeAvailable = false;
+
+    if (nowDateStr > startDateStr) {
+      // Day is past start_date → available regardless of hour
+      shouldBeAvailable = true;
+    } else if (nowDateStr === startDateStr) {
+      // Same day → check if current time >= restart_hour
+      const [hh, mm] = agent.restart_hour.split(':').map(Number);
+      if (now.getHours() > hh || (now.getHours() === hh && now.getMinutes() >= mm)) {
+        shouldBeAvailable = true;
+      }
+    }
+
+    if (shouldBeAvailable && agent.status !== 'disponible') {
       const oldStatus = agent.status;
       agent.status = 'disponible';
-      agent.last_update = ref.toISOString();
+      agent.last_update = now.toISOString();
       await modelsStore().put(agent);
 
       await histStore().add({
@@ -231,7 +242,7 @@
         old_status: oldStatus,
         new_status: 'disponible',
         change_time: agent.last_update,
-        reason: 'reinicio automático'
+        reason: 'reinicio automático por fecha/hora cumplida'
       });
     }
 
