@@ -316,7 +316,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    cachedAgents = agents;
     // Note: handleSearchAndFilter will call renderAgents recursively if called from here, 
     // so we need to be careful. But here we are PROVIDING the agents to render.
 
