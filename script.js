@@ -715,10 +715,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const nowIso = new Date().toISOString();
       let hasChanges = false;
       for (const agent of cachedAgents) {
-        if (agent.status !== 'disponible') {
-          const result = await window.localApi.refreshAgent(agent.id, nowIso);
-          if (result.status === 'disponible') hasChanges = true;
-        }
+        const result = await window.localApi.refreshAgent(agent.id, nowIso);
+        if (result.status !== agent.status) hasChanges = true;
       }
       if (hasChanges) {
         await fetchAgents();
