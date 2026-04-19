@@ -3,9 +3,11 @@
    Theme: Light Navy Premium
    ============================================================ */
 
-/* --- CSS Custom Properties --- */
+/* --- Fonts --- */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+
 :root {
-  /* Navy palette */
+  /* Navy palette (Core) */
   --navy-900: #0c1929;
   --navy-800: #132337;
   --navy-700: #1a2f4a;
@@ -17,11 +19,11 @@
   --navy-100: #d6e4f5;
   --navy-50:  #edf2fa;
 
-  /* Accent */
+  /* Accent - Vibrant Blue */
   --accent: #3b82f6;
   --accent-hover: #2563eb;
   --accent-glow: rgba(59, 130, 246, 0.25);
-
+  
   /* Semantic */
   --success: #10b981;
   --success-light: #d1fae5;
@@ -32,42 +34,62 @@
   --warning: #f59e0b;
   --warning-light: #fef3c7;
 
-  /* Surfaces */
-  --bg: #f0f4f8;
+  /* Initial Theme (Light) */
+  --bg: #f8fafc;
   --surface: #ffffff;
-  --surface-hover: #f8fafc;
+  --surface-hover: #f1f5f9;
   --border: #e2e8f0;
   --border-light: #f1f5f9;
-
-  /* Text */
-  --text-primary: #1e293b;
-  --text-secondary: #64748b;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
   --text-muted: #94a3b8;
   --text-on-navy: #ffffff;
   --text-on-accent: #ffffff;
+  
+  --header-bg: linear-gradient(135deg, var(--navy-800), var(--navy-600));
+  --card-bg: var(--surface);
+  --input-bg: var(--surface);
 
   /* Shadows */
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
-  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 4px 12px -1px rgba(0, 0, 0, 0.08), 0 2px 4px -2px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 12px 24px -3px rgba(0, 0, 0, 0.1), 0 4px 8px -4px rgba(0, 0, 0, 0.06);
   --shadow-glow: 0 0 20px rgba(59, 130, 246, 0.15);
 
   /* Typography */
-  --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --font-sans: 'Outfit', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', monospace;
 
   /* Spacing */
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-xl: 20px;
-  --radius-pill: 50px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+  --radius-pill: 9999px;
 
   /* Transitions */
   --ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --duration: 200ms;
-  --duration-slow: 350ms;
+  --duration: 250ms;
+}
+
+/* --- Dark Theme --- */
+[data-theme="dark"] {
+  --bg: #0b1120;
+  --surface: #1e293b;
+  --surface-hover: #334155;
+  --border: #334155;
+  --border-light: #1e293b;
+  --text-primary: #f8fafc;
+  --text-secondary: #cbd5e1;
+  --text-muted: #64748b;
+  
+  --header-bg: linear-gradient(135deg, #0f172a, #1e293b);
+  --card-bg: #1e293b;
+  --input-bg: #0f172a;
+  
+  --navy-50: rgba(255, 255, 255, 0.03);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
 }
 
 /* --- Reset & Base --- */
@@ -261,8 +283,8 @@ a:hover {
   padding: 24px;
   box-shadow: var(--shadow-sm);
   margin-bottom: 20px;
-  transition: box-shadow var(--duration) var(--ease);
-  animation: fadeSlideUp 0.4s var(--ease) both;
+  transition: all 0.3s var(--ease);
+  animation: fadeSlideUp 0.6s var(--ease) both;
 }
 
 .card:hover {
@@ -735,10 +757,69 @@ a:hover {
 }
 
 
+/* --- Modal --- */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.3s var(--ease) both;
+}
+
+.modal-content {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-xl);
+  max-width: 600px;
+  width: 100%;
+  animation: fadeSlideUp 0.4s var(--ease) both;
+  color: var(--text-primary);
+}
+
+/* --- Filter Buttons --- */
+.filter-btn {
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  font-size: 0.82rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--duration) var(--ease);
+}
+
+.filter-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.filter-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+/* --- Interactive Effects --- */
+.model-row {
+  transition: all var(--duration) var(--ease);
+}
+
+.model-row:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+}
+
 /* --- Data Actions --- */
 .data-actions {
   display: flex;
-  gap: 8px;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
@@ -760,9 +841,22 @@ a:hover {
 }
 
 @keyframes bounceIn {
-  0% { transform: translateX(-50%) scale(0.9); opacity: 0; }
-  60% { transform: translateX(-50%) scale(1.03); }
-  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+  0% { transform: scale(0.9); opacity: 0; }
+  60% { transform: scale(1.03); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes badgeIn {
+  from { transform: scale(0.5); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.badge {
+  animation: badgeIn 0.3s var(--ease) both;
+}
+
+.modal-content {
+  animation: bounceIn 0.4s var(--ease) both;
 }
 
 /* Card entrance stagger */

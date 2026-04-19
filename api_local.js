@@ -26,6 +26,7 @@
     users: '++id, email',
     ai_models: '++id, user_id, status',
     history4: '++id, model_id',
+    model_types: '++id, name',
     // Kept to allow migration
     directory: '++id, email',
     agents3: '++id, directory_id, status',
@@ -80,6 +81,16 @@
           reason: h.reason || ''
         });
       }
+    }
+  });
+
+  db.version(5).stores({
+    model_types: '++id, &name'
+  }).upgrade(async (trans) => {
+    // Seed default types if upgrading to v5
+    const defaults = ['Gemini Pro', 'Gemini Flash', 'Cloude/GPT-OSS', 'Copilot', 'GPT'];
+    for (const name of defaults) {
+      await trans.table('model_types').add({ name });
     }
   });
 
@@ -323,6 +334,20 @@
     return { total, available, unavailable };
   }
 
+  // --- Model Types Catalog ---
+  async function getModelTypes() {
+    return await db.model_types.toArray();
+  }
+
+  async function addModelType(name) {
+    if (!name) throw new Error('El nombre del modelo es requerido.');
+    return await db.model_types.add({ name });
+  }
+
+  async function deleteModelType(id) {
+    return await db.model_types.delete(Number(id));
+  }
+
   // --- Public API ---
   window.localApi = {
     createOrGetUser,
@@ -336,6 +361,9 @@
     exportData,
     importData,
     seedIfNeeded,
-    getStats
+    getStats,
+    getModelTypes,
+    addModelType,
+    deleteModelType
   };
 })();

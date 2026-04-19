@@ -34,6 +34,11 @@
           <div class="app-subtitle">Gestión de estado en tiempo real</div>
         </div>
       </div>
+      <div class="header-actions">
+        <button id="theme-toggle" class="btn btn-icon btn-ghost" title="Cambiar tema" style="border:none; background:rgba(255,255,255,0.1); color:white; border-radius:12px;">
+          <span id="theme-icon">🌙</span>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -86,86 +91,8 @@
         <div class="form-group" style="margin-top: 4px;">
           <label class="form-label" style="font-size: 1rem; border-bottom: 2px solid var(--border); padding-bottom: 8px; margin-bottom: 12px;">Modelos a Habilitar (Verifica y ajusta disponibilidad)</label>
           <div id="ai-models-container" style="display: grid; gap: 12px;">
-            <!-- Gemini Pro -->
-            <div class="model-row" style="background: white; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px;">
-              <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; margin: 0;">
-                <input type="checkbox" class="model-cb" value="Gemini Pro" /> Gemini Pro
-              </label>
-              <div class="model-settings" style="display: none; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-                <div>
-                  <label class="form-label" style="font-size:0.8rem;">Fecha</label>
-                  <input type="date" class="form-input model-date" />
-                </div>
-                <div>
-                  <label class="form-label" style="font-size:0.8rem;">Hora Reinicio</label>
-                  <input type="time" class="form-input model-time" value="08:00" />
-                </div>
-              </div>
-            </div>
-            <!-- Gemini Flash -->
-            <div class="model-row" style="background: white; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px;">
-              <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; margin: 0;">
-                <input type="checkbox" class="model-cb" value="Gemini Flash" /> Gemini Flash
-              </label>
-              <div class="model-settings" style="display: none; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-                <div>
-                  <label class="form-label" style="font-size:0.8rem;">Fecha</label>
-                  <input type="date" class="form-input model-date" />
-                </div>
-                <div>
-                  <label class="form-label" style="font-size:0.8rem;">Hora Reinicio</label>
-                  <input type="time" class="form-input model-time" value="08:00" />
-                </div>
-              </div>
-            </div>
-            <!-- Cloude/GPT-OSS -->
-            <div class="model-row" style="background: white; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px;">
-              <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; margin: 0;">
-                <input type="checkbox" class="model-cb" value="Cloude/GPT-OSS" /> Cloude/GPT-OSS
-              </label>
-              <div class="model-settings" style="display: none; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-                <div>
-                  <label class="form-label" style="font-size:0.8rem;">Fecha</label>
-                  <input type="date" class="form-input model-date" />
-                </div>
-                <div>
-                  <label class="form-label" style="font-size:0.8rem;">Hora Reinicio</label>
-                  <input type="time" class="form-input model-time" value="08:00" />
-                </div>
-              </div>
-            </div>
-            <!-- Copilot -->
-            <div class="model-row" style="background: white; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px;">
-              <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; margin: 0;">
-                <input type="checkbox" class="model-cb" value="Copilot" /> Copilot
-              </label>
-              <div class="model-settings" style="display: none; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-                <div>
-                  <label class="form-label" style="font-size:0.8rem;">Fecha</label>
-                  <input type="date" class="form-input model-date" />
-                </div>
-                <div>
-                  <label class="form-label" style="font-size:0.8rem;">Hora Reinicio</label>
-                  <input type="time" class="form-input model-time" value="08:00" />
-                </div>
-              </div>
-            </div>
-            <!-- GPT -->
-            <div class="model-row" style="background: white; border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px;">
-              <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; margin: 0;">
-                <input type="checkbox" class="model-cb" value="GPT" /> GPT
-              </label>
-              <div class="model-settings" style="display: none; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
-                <div>
-                  <label class="form-label" style="font-size:0.8rem;">Fecha</label>
-                  <input type="date" class="form-input model-date" />
-                </div>
-                <div>
-                  <label class="form-label" style="font-size:0.8rem;">Hora Reinicio</label>
-                  <input type="time" class="form-input model-time" value="08:00" />
-                </div>
-              </div>
-            </div>
+            <!-- Rendered dynamically by script.js -->
+            <div class="loading-text">Cargando catálogo de modelos...</div>
           </div>
         </div>
 
@@ -176,6 +103,21 @@
         </div>
       </div>
       <div id="form-status" role="status" aria-live="polite" style="margin-top:10px; font-size:0.85rem; color:var(--text-secondary);"></div>
+    </section>
+
+    <!-- Search & Filters -->
+    <section class="card" style="padding: 16px; margin-bottom: 16px;">
+      <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: center;">
+        <div style="flex: 1; min-width: 280px; position: relative;">
+          <span style="position: absolute; left: 12px; top: 50%; transform: translateY(-50%); opacity: 0.5;">🔍</span>
+          <input type="text" id="search-input" class="form-input" placeholder="Buscar por email o modelo..." style="padding-left: 36px; width: 100%;" />
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="filter-btn btn btn-ghost btn-sm active" data-filter="all">Todos</button>
+          <button class="filter-btn btn btn-ghost btn-sm" data-filter="disponible">Disponibles</button>
+          <button class="filter-btn btn btn-ghost btn-sm" data-filter="no disponible">En Espera</button>
+        </div>
+      </div>
     </section>
 
     <!-- Agents Table -->
@@ -207,6 +149,23 @@
     </section>
 
 
+    <!-- Settings / Catalogue Management -->
+    <section class="card" aria-label="Configuración de Modelos">
+      <div class="card-header">
+        <h2 class="card-title">
+          <span class="card-title-icon" aria-hidden="true">⚙️</span>
+          Configuración del Catálogo
+        </h2>
+      </div>
+      <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+        <input type="text" id="new-model-type-input" class="form-input" placeholder="Nombre de nuevo modelo (ej: GPT-5)" style="flex: 1;" />
+        <button id="add-model-type-btn" class="btn btn-accent">➕ Añadir al Catálogo</button>
+      </div>
+      <div id="catalog-list" style="display: flex; gap: 10px; flex-wrap: wrap;">
+        <!-- Filled by JS -->
+      </div>
+    </section>
+
     <!-- Data Management Panel -->
     <section class="card" aria-label="Gestión de Datos">
       <div class="card-header" style="margin-bottom: 12px; padding-bottom: 12px;">
@@ -222,6 +181,22 @@
       </div>
     </section>
   </main>
+
+  <!-- History Modal -->
+  <div id="history-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-content card" style="max-width: 600px; width: 90%; max-height: 85vh; overflow-y: auto;">
+      <div class="card-header">
+        <h2 class="card-title">
+          <span class="card-title-icon">🕒</span>
+          Historial de Cambios
+        </h2>
+        <button id="close-history-btn" class="btn btn-icon btn-ghost" style="border:none;">&times;</button>
+      </div>
+      <div id="history-list" class="history-panel">
+        <!-- populated by js -->
+      </div>
+    </div>
+  </div>
 
   <!-- Footer -->
   <footer style="text-align:center; padding:24px; color:var(--text-muted); font-size:0.78rem;">

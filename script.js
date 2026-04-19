@@ -10,9 +10,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const addBtn          = document.getElementById('add-btn');
   const formStatus      = document.getElementById('form-status');
 
-  const modelCheckboxes = document.querySelectorAll('.model-cb');
-
   const tbody           = document.querySelector('#agents-table tbody');
+  const modelsContainer = document.getElementById('ai-models-container');
+  const catalogList     = document.getElementById('catalog-list');
+  const newModelInput   = document.getElementById('new-model-type-input');
+  const addModelTypeBtn = document.getElementById('add-model-type-btn');
   const refreshAllBtn   = document.getElementById('refresh-all-btn');
   const notifContainer  = document.getElementById('notification-container');
 
@@ -25,7 +27,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const exportBtn = document.getElementById('export-btn');
   const importBtn = document.getElementById('import-btn');
 
+  // New Search & Filter Refs
+  const searchInput = document.getElementById('search-input');
+  const filterBtns  = document.querySelectorAll('.filter-btn');
+  const themeToggle = document.getElementById('theme-toggle');
+  const themeIcon   = document.getElementById('theme-icon');
+
+  // History Modal Refs
+  const historyModal      = document.getElementById('history-modal');
+  const historyList       = document.getElementById('history-list');
+  const closeHistoryBtn   = document.getElementById('close-history-btn');
+
   let cachedAgents = [];
+  let currentFilter = 'all';
+  let searchTerm    = '';
 
   // --- Notifications ---
   function showNotification(message, type = 'info', duration = 3500) {
@@ -73,7 +88,26 @@ document.addEventListener('DOMContentLoaded', () => {
     }, stepTime);
   }
 
-  // --- Form Toggle ---
+  // --- Theme Management ---
+  function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    document.documentElement.setAttribute('data-theme', savedTheme);
+    updateThemeIcon(savedTheme);
+  }
+
+  function updateThemeIcon(theme) {
+    if (themeIcon) themeIcon.textContent = theme === 'dark' ? '☀️' : '🌙';
+  }
+
+  themeToggle?.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    const next = current === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('theme', next);
+    updateThemeIcon(next);
+  });
+
+  initTheme();
   const toggleFormBtn   = document.getElementById('toggle-form-btn');
   const addFormSection  = document.getElementById('ai-assignment-form');
   
@@ -89,19 +123,93 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // --- UI Interactivity ---
-  modelCheckboxes.forEach(cb => {
-    cb.addEventListener('change', (e) => {
-      const parent = cb.closest('.model-row');
-      const settings = parent.querySelector('.model-settings');
-      if (cb.checked) {
-        settings.style.display = 'grid';
-        parent.style.borderColor = 'var(--accent)';
-      } else {
-        settings.style.display = 'none';
-        parent.style.borderColor = 'var(--border)';
-      }
+  // --- Model Type Catalog Logic ---
+  async function fetchModelTypes() {
+    if (!window.localApi?.getModelTypes) return;
+    try {
+      const types = await window.localApi.getModelTypes();
+      renderAssignmentForm(types);
+      renderCatalog(types);
+    } catch (err) {
+      console.error('[fetchModelTypes]', err);
+    }
+  }
+
+  function renderAssignmentForm(types) {
+    if (!modelsContainer) return;
+    if (types.length === 0) {
+      modelsContainer.innerHTML = '<div class="empty-state">No hay modelos en el catálogo. Añade uno abajo.</div>';
+      return;
+    }
+
+    modelsContainer.innerHTML = types.map(t => `
+      <div class="model-row" style="background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 12px;">
+        <label style="display: flex; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; margin: 0; color: var(--text-primary);">
+          <input type="checkbox" class="model-cb" value="${t.name}" /> ${t.name}
+        </label>
+        <div class="model-settings" style="display: none; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);">
+          <div>
+            <label class="form-label" style="font-size:0.8rem;">Fecha</label>
+            <input type="date" class="form-input model-date" />
+          </div>
+          <div>
+            <label class="form-label" style="font-size:0.8rem;">Hora Reinicio</label>
+            <input type="time" class="form-input model-time" value="08:00" />
+          </div>
+        </div>
+      </div>
+    `).join('');
+
+    // Re-attach listeners
+    modelsContainer.querySelectorAll('.model-cb').forEach(cb => {
+      cb.addEventListener('change', (e) => {
+        const parent = cb.closest('.model-row');
+        const settings = parent.querySelector('.model-settings');
+        if (cb.checked) {
+          settings.style.display = 'grid';
+          parent.style.borderColor = 'var(--accent)';
+        } else {
+          settings.style.display = 'none';
+          parent.style.borderColor = 'var(--border)';
+        }
+      });
     });
+  }
+
+  function renderCatalog(types) {
+    if (!catalogList) return;
+    catalogList.innerHTML = types.map(t => `
+      <div class="badge" style="background: var(--navy-50); color: var(--text-secondary); border: 1px solid var(--border); padding: 8px 12px; gap: 10px;">
+        ${t.name}
+        <button class="delete-model-type-btn" data-id="${t.id}" style="border:none; background:transparent; cursor:pointer; font-weight:bold; color:var(--danger); padding:0 4px;">&times;</button>
+      </div>
+    `).join('');
+  }
+
+  addModelTypeBtn?.addEventListener('click', async () => {
+    const name = newModelInput.value.trim();
+    if (!name) return;
+    try {
+      await window.localApi.addModelType(name);
+      newModelInput.value = '';
+      showNotification(`Modelo "${name}" añadido al catálogo`, 'success');
+      await fetchModelTypes();
+    } catch (err) {
+      showNotification(err.message, 'error');
+    }
+  });
+
+  catalogList?.addEventListener('click', async (e) => {
+    if (e.target.classList.contains('delete-model-type-btn')) {
+      const id = e.target.dataset.id;
+      if (!confirm('¿Eliminar este tipo de modelo del catálogo?\nNo afectará a las asignaciones existentes.')) return;
+      try {
+        await window.localApi.deleteModelType(id);
+        await fetchModelTypes();
+      } catch (err) {
+        showNotification(err.message, 'error');
+      }
+    }
   });
 
   // --- Add Assignments ---
@@ -111,9 +219,10 @@ document.addEventListener('DOMContentLoaded', () => {
     
     if (!email) { showNotification('El correo es requerido.', 'warning'); emailInput.focus(); return; }
     
-    // Collect checked models
+    // Collect checked models dynamically
     const checkedModels = [];
-    modelCheckboxes.forEach(cb => {
+    const dynCheckboxes = modelsContainer.querySelectorAll('.model-cb');
+    dynCheckboxes.forEach(cb => {
       if (cb.checked) {
         const parent = cb.closest('.model-row');
         checkedModels.push({
@@ -159,7 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showNotification(`✅ Se asignaron ${successCount} modelos al correo`, 'success');
         // Reset form completely
         emailInput.value = '';
-        modelCheckboxes.forEach(cb => {
+        modelsContainer.querySelectorAll('.model-cb').forEach(cb => {
           cb.checked = false;
           cb.dispatchEvent(new Event('change')); // Trigger hide
         });
@@ -208,6 +317,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     cachedAgents = agents;
+    // Note: handleSearchAndFilter will call renderAgents recursively if called from here, 
+    // so we need to be careful. But here we are PROVIDING the agents to render.
 
     // Group by email
     const groupedAgents = {};
@@ -312,6 +423,7 @@ document.addEventListener('DOMContentLoaded', () => {
           <td data-label="Última Actualización">${lastUpdate}</td>
           <td data-label="Acciones">
             <div class="cell-actions">
+              <button data-id="${a.id}" class="btn btn-ghost btn-sm history-btn" title="Ver Historial">🕒</button>
               <button data-id="${a.id}" class="btn btn-ghost btn-sm edit-btn" title="Editar Tiempos (En Línea)">✏️</button>
               <button data-id="${a.id}" class="btn btn-ghost btn-sm refresh-btn" aria-label="Actualizar modelo" title="Comprobar reinicio automático">🔄</button>
               <select data-id="${a.id}" class="force-select" aria-label="Cambiar estado manual">
@@ -338,7 +450,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     try {
       const agents = await window.localApi.getAgents();
-      renderAgents(Array.isArray(agents) ? agents : []);
+      cachedAgents = Array.isArray(agents) ? agents : [];
+      handleSearchAndFilter(); // Maintains search/filter state
       await updateStats();
     } catch (err) {
       console.error('[fetchAgents]', err);
@@ -452,6 +565,14 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(() => { fetchAgents(); showNotification('Modelo IA Removido', 'info', 2500); })
         .catch(err => showNotification('Error: ' + (err?.message || err), 'error'))
         .finally(() => { btn.disabled = false; });
+      return;
+    }
+
+    // 7. View History
+    if (t.classList.contains('history-btn') || t.closest('.history-btn')) {
+      const btn = t.classList.contains('history-btn') ? t : t.closest('.history-btn');
+      const id = btn.getAttribute('data-id');
+      showHistory(id);
     }
   });
 
@@ -526,6 +647,89 @@ document.addEventListener('DOMContentLoaded', () => {
     fileInput.click();
   });
 
+  // --- Search & Filter Logic ---
+  const handleSearchAndFilter = () => {
+    searchTerm = searchInput.value.toLowerCase().trim();
+    const filtered = cachedAgents.filter(a => {
+      const matchesSearch = (a.email?.toLowerCase().includes(searchTerm) || a.model_name?.toLowerCase().includes(searchTerm));
+      const matchesFilter = (currentFilter === 'all' || a.status === currentFilter);
+      return matchesSearch && matchesFilter;
+    });
+    renderAgents(filtered);
+  };
+
+  searchInput?.addEventListener('input', handleSearchAndFilter);
+
+  filterBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      filterBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentFilter = btn.dataset.filter;
+      handleSearchAndFilter();
+    });
+  });
+
+  // --- History Modal Logic ---
+  async function showHistory(id) {
+    if (!window.localApi?.getHistory) return;
+    historyList.innerHTML = '<div class="loading-text"><span class="spinner"></span> Obteniendo historial...</div>';
+    historyModal.style.display = 'flex';
+
+    try {
+      const history = await window.localApi.getHistory(id);
+      if (!history || history.length === 0) {
+        historyList.innerHTML = '<div class="empty-state">No hay cambios registrados para este modelo.</div>';
+        return;
+      }
+
+      historyList.innerHTML = history.map(h => {
+        const date = new Date(h.change_time).toLocaleString();
+        const typeClass = h.new_status === 'disponible' ? 'to-disponible' : (h.new_status === 'no disponible' ? 'to-no-disponible' : '');
+        return `
+          <div class="history-item ${typeClass}">
+            <div class="history-time">${date}</div>
+            <div class="history-change">
+              <strong>${h.old_status}</strong> <span class="arrow">→</span> <strong>${h.new_status}</strong>
+            </div>
+            <div class="history-reason">${h.reason || 'Sin razón especificada'}</div>
+          </div>
+        `;
+      }).join('');
+    } catch (err) {
+      historyList.innerHTML = `<div class="error-text">Error: ${err.message}</div>`;
+    }
+  }
+
+  closeHistoryBtn?.addEventListener('click', () => {
+    historyModal.style.display = 'none';
+  });
+
+  window.addEventListener('click', (e) => {
+    if (e.target === historyModal) historyModal.style.display = 'none';
+  });
+
+  // --- Auto-Refresh Loop ---
+  let refreshInterval = null;
+  function startAutoRefresh() {
+    if (refreshInterval) clearInterval(refreshInterval);
+    refreshInterval = setInterval(async () => {
+      const nowIso = new Date().toISOString();
+      let hasChanges = false;
+      for (const agent of cachedAgents) {
+        if (agent.status !== 'disponible') {
+          const result = await window.localApi.refreshAgent(agent.id, nowIso);
+          if (result.status === 'disponible') hasChanges = true;
+        }
+      }
+      if (hasChanges) {
+        await fetchAgents();
+        showNotification('✅ Disponibilidad actualizada automáticamente', 'success', 2000);
+      }
+    }, 60000); // Every 60 seconds
+  }
+
   // --- Initial Load ---
   fetchAgents();
+  fetchModelTypes();
+  startAutoRefresh();
 });
