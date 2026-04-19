@@ -99,6 +99,14 @@
   function modelsStore() { return db.ai_models; }
   function histStore() { return db.history4; }
 
+  /** Returns 'YYYY-MM-DD' in local time */
+  function getLocalDateString(date) {
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
   // --- Users ---
   async function createOrGetUser(email) {
     if (!email) throw new Error('El correo es requerido.');
@@ -192,7 +200,8 @@
       reason: 'actualización de horas/fechas'
     });
 
-    return agent;
+    // Re-evaluate availability immediately after settings change
+    return await refreshAgent(numId, agent.last_update);
   }
 
   async function updateAgentManual(id, status) {
@@ -224,9 +233,10 @@
     if (!agent) throw new Error('Instancia de modelo no encontrada.');
 
     const now = new Date(reference_datetime);
-    const nowDateStr = now.toISOString().split('T')[0]; // "2026-04-02"
+    const nowDateStr = getLocalDateString(now);
 
-    // Get start date (raw, no timezone shift)
+    // Get start date from ISO string (YYYY-MM-DD)
+    // We treat the date part of the ISO string as the local "Target Day"
     const startDateStr = agent.start_date ? agent.start_date.split('T')[0] : nowDateStr;
 
     let shouldBeAvailable = false;
@@ -235,25 +245,29 @@
       // Day is past start_date → available regardless of hour
       shouldBeAvailable = true;
     } else if (nowDateStr === startDateStr) {
-      // Same day → check if current time >= restart_hour
+      // Same day → check if current time >= restart_hour (Local Time)
       const [hh, mm] = agent.restart_hour.split(':').map(Number);
       if (now.getHours() > hh || (now.getHours() === hh && now.getMinutes() >= mm)) {
         shouldBeAvailable = true;
       }
     }
 
-    if (shouldBeAvailable && agent.status !== 'disponible') {
-      const oldStatus = agent.status;
-      agent.status = 'disponible';
+    const oldStatus = agent.status;
+    const targetStatus = shouldBeAvailable ? 'disponible' : 'no disponible';
+
+    if (oldStatus !== targetStatus) {
+      agent.status = targetStatus;
       agent.last_update = now.toISOString();
       await modelsStore().put(agent);
 
       await histStore().add({
         model_id: numId,
         old_status: oldStatus,
-        new_status: 'disponible',
+        new_status: targetStatus,
         change_time: agent.last_update,
-        reason: 'reinicio automático por fecha/hora cumplida'
+        reason: targetStatus === 'disponible' 
+          ? 'disponible por fecha/hora cumplida' 
+          : 'no disponible por fecha futura o pendiente'
       });
     }
 
